@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DJI Mic 2 Transcriber</title>
+  <style>
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d26;
+      --surface2:  #22263a;
+      --border:    #2e3348;
+      --text:      #e8eaf0;
+      --muted:     #7a7f9a;
+      --accent:    #4f7ef8;
+      --accent-h:  #6b94ff;
+      --green:     #34d399;
+      --red:       #f87171;
+      --yellow:    #fbbf24;
+      --r:         8px;
+      --mono:      'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    /* ── Browser warning ─────────────────────────────────────────── */
+    #browser-warning {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 1rem;
+      padding: 2rem;
+      text-align: center;
+    }
+    #browser-warning h1 { color: var(--yellow); font-size: 1.25rem; }
+    #browser-warning p  { color: var(--muted); max-width: 440px; }
+
+    /* ── App shell ───────────────────────────────────────────────── */
+    #app { display: none; flex-direction: column; min-height: 100vh; }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 { font-size: 0.9rem; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+
+    .api-status { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.8rem; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.3s; }
+    .dot.ok      { background: var(--green); }
+    .dot.err     { background: var(--red); }
+    .dot.checking { background: var(--yellow); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    .icon-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); padding: 0.35rem; border-radius: 6px;
+      display: flex; align-items: center; transition: color .15s, background .15s;
+    }
+    .icon-btn:hover { color: var(--text); background: var(--surface2); }
+    .icon-btn svg  { width: 18px; height: 18px; }
+
+    /* ── Settings drawer ─────────────────────────────────────────── */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.55); z-index: 100;
+      align-items: flex-start; justify-content: flex-end;
+    }
+    .overlay.open { display: flex; }
+
+    .drawer {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      width: 360px; max-width: 100vw; height: 100vh;
+      overflow-y: auto;
+      padding: 1.25rem;
+      display: flex; flex-direction: column; gap: 1.25rem;
+    }
+    .drawer-head { display: flex; align-items: center; justify-content: space-between; }
+    .drawer-head h2 { font-size: 0.95rem; font-weight: 600; }
+
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .field label { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+    .field input, .field select {
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: var(--r);
+      padding: 0.45rem 0.7rem; font-size: 0.85rem; font-family: inherit; width: 100%;
+    }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+    .hint { font-size: 0.72rem; color: var(--muted); }
+    .check-row { flex-direction: row; align-items: center; gap: 0.6rem; }
+    .check-row label { color: var(--text); font-size: 0.85rem; }
+    .check-row input { width: auto; accent-color: var(--accent); }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.45rem 0.9rem; border-radius: var(--r);
+      font-size: 0.85rem; font-family: inherit; font-weight: 500;
+      cursor: pointer; border: none; transition: background .15s, opacity .15s;
+    }
+    .btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm { padding: 0.25rem 0.55rem; font-size: 0.78rem; }
+
+    /* ── Main ────────────────────────────────────────────────────── */
+    main {
+      flex: 1; padding: 1.25rem;
+      max-width: 860px; margin: 0 auto; width: 100%;
+      display: flex; flex-direction: column; gap: 1.25rem;
+    }
+
+    /* ── Panel ───────────────────────────────────────────────────── */
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+
+    .panel-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.875rem 1.125rem; border-bottom: 1px solid var(--border);
+      gap: 0.75rem; flex-wrap: wrap;
+    }
+    .panel-title { font-weight: 600; font-size: 0.875rem; }
+    .panel-meta  { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+    .panel-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+    /* ── Notice ──────────────────────────────────────────────────── */
+    .notice {
+      margin: 0.875rem 1.125rem;
+      padding: 0.55rem 0.8rem;
+      border-radius: var(--r); font-size: 0.8rem;
+      display: flex; align-items: center; gap: 0.6rem;
+    }
+    .notice.warn { background: rgba(251,191,36,.07); border: 1px solid rgba(251,191,36,.25); color: var(--yellow); }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty {
+      padding: 3rem 1.5rem; text-align: center;
+      color: var(--muted); font-size: 0.85rem;
+      display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+    }
+    .empty svg { opacity: .25; width: 40px; height: 40px; }
+
+    /* ── File list ───────────────────────────────────────────────── */
+    .file-item { border-bottom: 1px solid var(--border); padding: 0.8rem 1.125rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .file-item:last-child { border-bottom: none; }
+
+    .file-row { display: flex; align-items: center; gap: 0.6rem; }
+    .file-check { flex-shrink: 0; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+    .file-name { font-family: var(--mono); font-size: 0.8rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+
+    .badge {
+      font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.45rem;
+      border-radius: 100px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; flex-shrink: 0;
+    }
+    .badge-pending  { background: var(--surface2); color: var(--muted); }
+    .badge-uploading { background: rgba(79,126,248,.15); color: var(--accent); }
+    .badge-done     { background: rgba(52,211,153,.15); color: var(--green); }
+    .badge-error    { background: rgba(248,113,113,.15); color: var(--red); }
+
+    .progress-bar  { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 1px; animation: indeterminate 1.4s ease infinite; }
+    @keyframes indeterminate {
+      0%   { transform: translateX(-100%) scaleX(.5); }
+      50%  { transform: translateX(0%)   scaleX(.8); }
+      100% { transform: translateX(100%) scaleX(.5); }
+    }
+
+    .transcript {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r);
+      padding: 0.7rem 0.9rem; font-size: 0.83rem; line-height: 1.65;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .transcript.mono { font-family: var(--mono); font-size: 0.78rem; }
+    .tx-actions { display: flex; gap: 0.5rem; }
+
+    .error-msg {
+      font-size: 0.78rem; color: var(--red);
+      background: rgba(248,113,113,.07); border: 1px solid rgba(248,113,113,.2);
+      border-radius: var(--r); padding: 0.5rem 0.7rem;
+      display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .error-msg span { flex: 1; }
+
+    /* ── Export ──────────────────────────────────────────────────── */
+    .export-bar {
+      padding: 0.875rem 1.125rem;
+      display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+    }
+    .export-bar span { font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<!-- Non-Chromium warning -->
+<div id="browser-warning">
+  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--yellow)">
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  <h1>Chromium-based browser required</h1>
+  <p>This app uses the File System Access API, which is only supported in Chrome, Edge, and Brave. Please reopen this page in one of those browsers.</p>
+</div>
+
+<!-- App -->
+<div id="app">
+
+  <!-- Settings drawer -->
+  <div class="overlay" id="overlay">
+    <div class="drawer">
+      <div class="drawer-head">
+        <h2>Settings</h2>
+        <button class="icon-btn" id="close-settings" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="field">
+        <label for="s-url">API Base URL <span style="color:var(--red)">*</span></label>
+        <input id="s-url" type="url" placeholder="https://parakeet.yourdomain.com/v1">
+        <span class="hint">Must expose POST /audio/transcriptions (OpenAI-compatible)</span>
+      </div>
+
+      <div class="field">
+        <label for="s-key">API Key</label>
+        <input id="s-key" type="password" placeholder="Leave blank if not required">
+      </div>
+
+      <div class="field">
+        <label for="s-model">Model</label>
+        <input id="s-model" type="text" placeholder="whisper-1">
+      </div>
+
+      <div class="field">
+        <label for="s-lang">Language</label>
+        <input id="s-lang" type="text" placeholder="en" maxlength="10">
+        <span class="hint">ISO 639-1 code, e.g. en, sv, fr. Leave blank to auto-detect.</span>
+      </div>
+
+      <div class="field">
+        <label for="s-fmt">Response Format</label>
+        <select id="s-fmt">
+          <option value="text">text</option>
+          <option value="json">json</option>
+          <option value="verbose_json">verbose_json</option>
+          <option value="srt">srt</option>
+          <option value="vtt">vtt</option>
+        </select>
+      </div>
+
+      <div class="field check-row">
+        <input id="s-delete" type="checkbox">
+        <label for="s-delete">Delete files from drive after successful transcription</label>
+      </div>
+
+      <button class="btn btn-primary" id="save-settings">Save</button>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <h1>DJI Mic 2 Transcriber</h1>
+    <div class="header-right">
+      <div class="api-status">
+        <div class="dot" id="api-dot"></div>
+        <span id="api-label">No API configured</span>
+      </div>
+      <button class="icon-btn" id="open-settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Recordings panel -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Recordings</div>
+          <div class="panel-meta" id="drive-meta">No drive selected</div>
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-ghost" id="btn-select">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+            Select DJI Drive
+          </button>
+          <button class="btn btn-primary" id="btn-transcribe" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Transcribe Selected
+          </button>
+        </div>
+      </div>
+
+      <div id="api-notice" class="notice warn" style="display:none">
+        API Base URL not configured.
+        <button class="btn btn-sm btn-ghost" onclick="openSettings()">Open Settings</button>
+      </div>
+
+      <div id="file-list">
+        <div class="empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          Select the DJI Mic 2 drive to list recordings
+        </div>
+      </div>
+    </div>
+
+    <!-- Export panel (shown after first transcription completes) -->
+    <div class="panel" id="export-panel" style="display:none">
+      <div class="export-bar">
+        <span>Export all transcriptions:</span>
+        <button class="btn btn-ghost btn-sm" id="btn-export-txt">Export .txt</button>
+        <button class="btn btn-ghost btn-sm" id="btn-export-md">Export .md</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+const DEFAULTS = {
+  api_base_url: '',
+  api_key: '',
+  model: 'whisper-1',
+  language: 'en',
+  response_format: 'text',
+  delete_after_transcription: false,
+};
+
+let cfg = (() => {
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('tj') || '{}') }; }
+  catch { return { ...DEFAULTS }; }
+})();
+
+function saveCfg() {
+  localStorage.setItem('tj', JSON.stringify(cfg));
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let dirHandle = null;
+let files = [];   // { handle, name, path, size, mtime, selected, status, transcript, error }
+let busy = false;
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+if (!('showDirectoryPicker' in window)) {
+  document.getElementById('browser-warning').style.display = 'flex';
+} else {
+  const app = document.getElementById('app');
+  app.style.display = 'flex';
+  app.style.flexDirection = 'column';
+  boot();
+}
+
+function boot() {
+  syncSettingsForm();
+  checkApi();
+  syncApiNotice();
+
+  document.getElementById('open-settings').onclick  = openSettings;
+  document.getElementById('close-settings').onclick = closeSettings;
+  document.getElementById('overlay').onclick = e => { if (e.target === e.currentTarget) closeSettings(); };
+  document.getElementById('save-settings').onclick  = onSave;
+  document.getElementById('btn-select').onclick      = pickDrive;
+  document.getElementById('btn-transcribe').onclick  = runTranscription;
+  document.getElementById('btn-export-txt').onclick  = () => exportAll('txt');
+  document.getElementById('btn-export-md').onclick   = () => exportAll('md');
+}
+
+// ── Settings panel ────────────────────────────────────────────────────────────
+
+function openSettings() { document.getElementById('overlay').classList.add('open'); }
+function closeSettings() { document.getElementById('overlay').classList.remove('open'); }
+
+function syncSettingsForm() {
+  document.getElementById('s-url').value    = cfg.api_base_url;
+  document.getElementById('s-key').value    = cfg.api_key;
+  document.getElementById('s-model').value  = cfg.model;
+  document.getElementById('s-lang').value   = cfg.language;
+  document.getElementById('s-fmt').value    = cfg.response_format;
+  document.getElementById('s-delete').checked = cfg.delete_after_transcription;
+}
+
+function onSave() {
+  cfg = {
+    api_base_url: document.getElementById('s-url').value.trim().replace(/\/$/, ''),
+    api_key:      document.getElementById('s-key').value.trim(),
+    model:        document.getElementById('s-model').value.trim() || DEFAULTS.model,
+    language:     document.getElementById('s-lang').value.trim(),
+    response_format:             document.getElementById('s-fmt').value,
+    delete_after_transcription:  document.getElementById('s-delete').checked,
+  };
+  saveCfg();
+  closeSettings();
+  checkApi();
+  syncApiNotice();
+  syncTranscribeBtn();
+}
+
+// ── API status ────────────────────────────────────────────────────────────────
+
+let apiTimer = null;
+
+function checkApi() {
+  const dot   = document.getElementById('api-dot');
+  const label = document.getElementById('api-label');
+  if (!cfg.api_base_url) {
+    dot.className = 'dot';
+    label.textContent = 'No API configured';
+    return;
+  }
+  dot.className = 'dot checking';
+  label.textContent = 'Checking…';
+  clearTimeout(apiTimer);
+  apiTimer = setTimeout(async () => {
+    try {
+      const headers = cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {};
+      await fetch(cfg.api_base_url, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
+      dot.className = 'dot ok';
+      label.textContent = 'API reachable';
+    } catch {
+      dot.className = 'dot err';
+      label.textContent = 'API unreachable';
+    }
+  }, 400);
+}
+
+function syncApiNotice() {
+  document.getElementById('api-notice').style.display = cfg.api_base_url ? 'none' : 'flex';
+}
+
+// ── Drive picker ──────────────────────────────────────────────────────────────
+
+async function pickDrive() {
+  try {
+    const mode = cfg.delete_after_transcription ? 'readwrite' : 'read';
+    dirHandle = await window.showDirectoryPicker({ mode });
+    files = [];
+    await scan(dirHandle, '');
+    files.sort((a, b) => a.path.localeCompare(b.path));
+    renderList();
+    syncTranscribeBtn();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
+}
+
+async function scan(handle, prefix) {
+  for await (const [name, entry] of handle.entries()) {
+    const path = prefix ? `${prefix}/${name}` : name;
+    if (entry.kind === 'file' && name.toLowerCase().endsWith('.wav')) {
+      const file = await entry.getFile();
+      files.push({ handle: entry, name, path, size: file.size, mtime: file.lastModified,
+                   selected: true, status: 'pending', transcript: null, error: null });
+    } else if (entry.kind === 'directory') {
+      await scan(entry, path);
+    }
+  }
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : `${(b/1048576).toFixed(1)} MB`;
+// WAV 48kHz 24-bit stereo ≈ 17 MB/min
+const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
+const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const BADGE = {
+  pending:   ['badge-pending',   'Pending'],
+  uploading: ['badge-uploading', 'Uploading'],
+  done:      ['badge-done',      'Done'],
+  error:     ['badge-error',     'Error'],
+};
+
+function renderList() {
+  const container = document.getElementById('file-list');
+  const meta      = document.getElementById('drive-meta');
+
+  if (!files.length) {
+    container.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>No WAV files found on this drive</div>`;
+    meta.textContent = dirHandle ? `${dirHandle.name} — 0 files` : 'No drive selected';
+    return;
+  }
+
+  const selSize = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
+  const totSize = files.reduce((a, f) => a + f.size, 0);
+  meta.textContent = `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} total · ${fmtDur(selSize)} selected`;
+
+  container.innerHTML = files.map((f, i) => itemHTML(f, i)).join('');
+
+  container.querySelectorAll('.file-check').forEach(cb => {
+    cb.addEventListener('change', e => {
+      files[+e.target.dataset.i].selected = e.target.checked;
+      syncTranscribeBtn();
+      syncMeta();
+    });
+  });
+
+  syncExportPanel();
+}
+
+function itemHTML(f, i) {
+  const [bc, bl] = BADGE[f.status] || BADGE.pending;
+  const isMono = ['srt','vtt'].includes(cfg.response_format);
+  return `
+    <div class="file-item" id="fi-${i}">
+      <div class="file-row">
+        <input type="checkbox" class="file-check" data-i="${i}" ${f.selected?'checked':''} ${busy?'disabled':''}>
+        <span class="file-name" title="${esc(f.path)}">${esc(f.path)}</span>
+        <span class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)} · ${fmtDate(f.mtime)}</span>
+        <span class="badge ${bc}">${bl}</span>
+      </div>
+      ${f.status === 'uploading' ? `<div class="progress-bar"><div class="progress-fill"></div></div>` : ''}
+      ${f.transcript !== null ? `
+        <div class="transcript${isMono?' mono':''}">${esc(f.transcript)}</div>
+        <div class="tx-actions">
+          <button class="btn btn-ghost btn-sm" onclick="copyTx(${i})">Copy</button>
+        </div>` : ''}
+      ${f.error ? `
+        <div class="error-msg">
+          <span>${esc(f.error)}</span>
+          <button class="btn btn-ghost btn-sm" onclick="retryOne(${i})">Retry</button>
+        </div>` : ''}
+    </div>`;
+}
+
+function patchItem(i) {
+  const el = document.getElementById(`fi-${i}`);
+  if (el) el.outerHTML = itemHTML(files[i], i);
+}
+
+function syncMeta() {
+  const selSize = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
+  const totSize = files.reduce((a, f) => a + f.size, 0);
+  document.getElementById('drive-meta').textContent =
+    `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} total · ${fmtDur(selSize)} selected`;
+}
+
+function syncTranscribeBtn() {
+  document.getElementById('btn-transcribe').disabled =
+    busy || !cfg.api_base_url || !files.some(f => f.selected);
+}
+
+function syncExportPanel() {
+  document.getElementById('export-panel').style.display =
+    files.some(f => f.status === 'done') ? 'block' : 'none';
+}
+
+// ── Transcription ─────────────────────────────────────────────────────────────
+
+async function runTranscription() {
+  if (busy) return;
+  busy = true;
+  syncTranscribeBtn();
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (!f.selected || f.status === 'done') continue;
+    await transcribe(f, i);
+  }
+
+  busy = false;
+  syncTranscribeBtn();
+  syncExportPanel();
+
+  if (cfg.delete_after_transcription) {
+    const done = files.filter(f => f.status === 'done');
+    if (done.length && confirm(`Delete ${done.length} transcribed file(s) from the drive?`)) {
+      for (const f of done) {
+        try { await f.handle.remove(); } catch (e) { console.warn('Delete failed:', f.name, e); }
+      }
+    }
+  }
+}
+
+async function transcribe(f, i) {
+  f.status = 'uploading';
+  f.error  = null;
+  patchItem(i);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+
+  try {
+    const blob = await f.handle.getFile();
+    const form = new FormData();
+    form.append('file', blob, f.name);
+    form.append('model', cfg.model);
+    if (cfg.language) form.append('language', cfg.language);
+    form.append('response_format', cfg.response_format);
+
+    const headers = cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {};
+
+    const res = await fetch(`${cfg.api_base_url}/audio/transcriptions`, {
+      method: 'POST', headers, body: form, signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 200) : ''}`);
+    }
+
+    f.transcript = await parseBody(res);
+    f.status = 'done';
+
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      f.error = 'Request timed out after 120 s.';
+    } else if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+      f.error = `Network / CORS error — confirm the API is reachable and has Access-Control-Allow-Origin configured. (${e.message})`;
+    } else {
+      f.error = e.message;
+    }
+    f.status = 'error';
+  }
+
+  patchItem(i);
+}
+
+async function parseBody(res) {
+  const fmt = cfg.response_format;
+  if (fmt === 'text' || fmt === 'srt' || fmt === 'vtt') return res.text();
+
+  // json / verbose_json — handle servers that ignore response_format and return plain text
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text);
+    return data.text ?? JSON.stringify(data, null, 2);
+  } catch {
+    return text;
+  }
+}
+
+async function retryOne(i) {
+  if (busy) return;
+  busy = true;
+  syncTranscribeBtn();
+  await transcribe(files[i], i);
+  busy = false;
+  syncTranscribeBtn();
+  syncExportPanel();
+}
+
+// ── Copy ──────────────────────────────────────────────────────────────────────
+
+async function copyTx(i) {
+  const tx = files[i]?.transcript;
+  if (!tx) return;
+  try {
+    await navigator.clipboard.writeText(tx);
+  } catch {
+    prompt('Copy the transcription:', tx);
+  }
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+function exportAll(fmt) {
+  const done = files.filter(f => f.status === 'done' && f.transcript !== null);
+  if (!done.length) return;
+  const content = fmt === 'txt'
+    ? done.map(f => `=== ${f.path} ===\n\n${f.transcript}`).join('\n\n\n')
+    : done.map(f => `## ${f.path}\n\n${f.transcript}`).join('\n\n---\n\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([content], { type: 'text/plain' })),
+    download: `transcriptions.${fmt}`,
+  });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
