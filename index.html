@@ -5,372 +5,599 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DJI Mic 2 Transcriber</title>
   <style>
+    /* Light-first — dark mode via prefers-color-scheme */
     :root {
-      --bg:        #0f1117;
-      --surface:   #1a1d26;
-      --surface2:  #22263a;
-      --border:    #2e3348;
-      --text:      #e8eaf0;
-      --muted:     #7a7f9a;
-      --accent:    #4f7ef8;
-      --accent-h:  #6b94ff;
-      --green:     #34d399;
-      --red:       #f87171;
-      --yellow:    #fbbf24;
-      --r:         8px;
-      --mono:      'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+      --bg:       #f9fafb;
+      --surface:  #ffffff;
+      --surface2: #f3f4f6;
+      --border:   #e5e7eb;
+      --text:     #111827;
+      --muted:    #6b7280;
+      --accent:   #2563eb;
+      --accent-h: #1d4ed8;
+      --green:    #059669;
+      --red:      #dc2626;
+      --yellow:   #d97706;
+      --r:        10px;
+      --mono:     ui-monospace, 'Cascadia Code', monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:       #0f1117;
+        --surface:  #1a1d26;
+        --surface2: #22263a;
+        --border:   #2e3348;
+        --text:     #e8eaf0;
+        --muted:    #7a7f9a;
+        --accent:   #4f7ef8;
+        --accent-h: #6b94ff;
+        --green:    #34d399;
+        --red:      #f87171;
+        --yellow:   #fbbf24;
+      }
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: system-ui, sans-serif;
+      font-family: system-ui, -apple-system, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       line-height: 1.5;
-      font-size: 14px;
+      font-size: 15px;
     }
 
-    /* ── Browser warning ─────────────────────────────────────────── */
-    #browser-warning {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      gap: 1rem;
-      padding: 2rem;
-      text-align: center;
+    /* ── Compat warning ───────────────────────────────────────────────────── */
+    #compat-warning {
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 100vh;
+      padding: 2rem; text-align: center; gap: 1rem;
     }
-    #browser-warning h1 { color: var(--yellow); font-size: 1.25rem; }
-    #browser-warning p  { color: var(--muted); max-width: 440px; }
+    #compat-warning h1 { font-size: 1.25rem; color: var(--yellow); }
+    #compat-warning p  { color: var(--muted); max-width: 460px; line-height: 1.7; }
 
-    /* ── App shell ───────────────────────────────────────────────── */
-    #app { display: none; flex-direction: column; min-height: 100vh; }
+    /* ── App ──────────────────────────────────────────────────────────────── */
+    #app {
+      display: none; flex-direction: column; min-height: 100vh;
+      padding-bottom: 80px; /* sticky action bar */
+    }
 
-    /* ── Header ─────────────────────────────────────────────────── */
+    /* ── Header ───────────────────────────────────────────────────────────── */
     header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.75rem 1.25rem;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      position: sticky; top: 0; z-index: 20;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
     }
-    header h1 { font-size: 0.9rem; font-weight: 600; }
-    .header-right { display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1rem; font-weight: 700; }
 
-    .api-status { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.8rem; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.3s; }
-    .dot.ok      { background: var(--green); }
-    .dot.err     { background: var(--red); }
-    .dot.checking { background: var(--yellow); animation: blink 1s infinite; }
+    .model-status { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--muted); }
+    .model-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); flex-shrink: 0; transition: background .3s;
+    }
+    .model-dot.cached  { background: var(--green); }
+    .model-dot.loading { background: var(--yellow); animation: blink 1s infinite; }
+    .model-dot.missing { background: var(--red); }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 
     .icon-btn {
       background: none; border: none; cursor: pointer;
-      color: var(--muted); padding: 0.35rem; border-radius: 6px;
-      display: flex; align-items: center; transition: color .15s, background .15s;
+      color: var(--muted); padding: 0.5rem; border-radius: 8px;
+      display: flex; align-items: center; gap: 0.35rem;
+      font-size: 0.85rem; font-family: inherit;
+      transition: color .15s, background .15s;
+      min-width: 44px; min-height: 44px; justify-content: center;
     }
     .icon-btn:hover { color: var(--text); background: var(--surface2); }
-    .icon-btn svg  { width: 18px; height: 18px; }
+    .icon-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-    /* ── Settings drawer ─────────────────────────────────────────── */
+    /* ── Settings overlay + drawer ────────────────────────────────────────── */
     .overlay {
       display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,.55); z-index: 100;
-      align-items: flex-start; justify-content: flex-end;
+      background: rgba(0,0,0,.45); z-index: 100;
+      align-items: flex-end; justify-content: stretch; /* mobile: bottom sheet */
     }
     .overlay.open { display: flex; }
 
     .drawer {
-      background: var(--surface);
-      border-left: 1px solid var(--border);
-      width: 360px; max-width: 100vw; height: 100vh;
-      overflow-y: auto;
-      padding: 1.25rem;
-      display: flex; flex-direction: column; gap: 1.25rem;
+      background: var(--surface); border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      width: 100%; max-height: 90vh; overflow-y: auto;
+      padding: 1.25rem; display: flex; flex-direction: column; gap: 1.1rem;
     }
-    .drawer-head { display: flex; align-items: center; justify-content: space-between; }
-    .drawer-head h2 { font-size: 0.95rem; font-weight: 600; }
+    .drawer-handle {
+      width: 40px; height: 4px; background: var(--border);
+      border-radius: 2px; margin: 0 auto -0.25rem;
+    }
 
+    @media (min-width: 640px) {
+      .overlay { align-items: flex-start; justify-content: flex-end; } /* right drawer */
+      .drawer {
+        width: 380px; height: 100vh; max-height: 100vh;
+        border-radius: 0; border-top: none; border-left: 1px solid var(--border);
+      }
+      .drawer-handle { display: none; }
+    }
+
+    .drawer-head { display: flex; align-items: center; justify-content: space-between; }
+    .drawer-head h2 { font-size: 1rem; font-weight: 600; }
+
+    .section-label {
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted);
+      padding-bottom: 0.6rem; border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Form fields ──────────────────────────────────────────────────────── */
     .field { display: flex; flex-direction: column; gap: 0.35rem; }
-    .field label { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
-    .field input, .field select {
+    .field label { font-size: 0.8rem; font-weight: 500; color: var(--muted); }
+    .field input[type="text"], .field input[type="number"],
+    .field input[type="password"], .field select {
       background: var(--surface2); border: 1px solid var(--border);
-      color: var(--text); border-radius: var(--r);
-      padding: 0.45rem 0.7rem; font-size: 0.85rem; font-family: inherit; width: 100%;
+      color: var(--text); border-radius: 8px;
+      padding: 0.55rem 0.75rem; font-size: 0.875rem; font-family: inherit; width: 100%;
     }
     .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
     .hint { font-size: 0.72rem; color: var(--muted); }
     .check-row { flex-direction: row; align-items: center; gap: 0.6rem; }
-    .check-row label { color: var(--text); font-size: 0.85rem; }
-    .check-row input { width: auto; accent-color: var(--accent); }
+    .check-row label { color: var(--text); font-size: 0.875rem; font-weight: normal; }
+    input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; }
 
-    /* ── Buttons ─────────────────────────────────────────────────── */
+    .storage-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .storage-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+    .storage-fill.warn { background: var(--red); }
+    .storage-info { font-size: 0.78rem; color: var(--muted); }
+
+    /* ── Buttons ──────────────────────────────────────────────────────────── */
     .btn {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      padding: 0.45rem 0.9rem; border-radius: var(--r);
-      font-size: 0.85rem; font-family: inherit; font-weight: 500;
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+      padding: 0.55rem 1.1rem; border-radius: 8px;
+      font-size: 0.875rem; font-family: inherit; font-weight: 500;
       cursor: pointer; border: none; transition: background .15s, opacity .15s;
+      min-height: 44px; white-space: nowrap;
     }
-    .btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .btn svg { width: 15px; height: 15px; flex-shrink: 0; }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
     .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
     .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-sm { padding: 0.25rem 0.55rem; font-size: 0.78rem; }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .btn-ghost:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-danger { background: rgba(220,38,38,.08); color: var(--red); border: 1px solid rgba(220,38,38,.2); }
+    .btn-danger:hover { background: rgba(220,38,38,.14); }
+    .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; min-height: 36px; }
 
-    /* ── Main ────────────────────────────────────────────────────── */
+    /* ── Main layout ──────────────────────────────────────────────────────── */
     main {
-      flex: 1; padding: 1.25rem;
-      max-width: 860px; margin: 0 auto; width: 100%;
-      display: flex; flex-direction: column; gap: 1.25rem;
+      flex: 1; padding: 1rem;
+      max-width: 800px; margin: 0 auto; width: 100%;
+      display: flex; flex-direction: column; gap: 1rem;
     }
 
-    /* ── Panel ───────────────────────────────────────────────────── */
+    /* ── Panel ────────────────────────────────────────────────────────────── */
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
-
     .panel-head {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.875rem 1.125rem; border-bottom: 1px solid var(--border);
+      padding: 0.875rem 1rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between;
       gap: 0.75rem; flex-wrap: wrap;
     }
-    .panel-title { font-weight: 600; font-size: 0.875rem; }
-    .panel-meta  { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
-    .panel-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .panel-title { font-weight: 600; font-size: 0.9rem; }
+    .panel-meta  { font-size: 0.78rem; color: var(--muted); margin-top: 0.1rem; }
+    .panel-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 
-    /* ── Notice ──────────────────────────────────────────────────── */
+    /* ── Notices ──────────────────────────────────────────────────────────── */
     .notice {
-      margin: 0.875rem 1.125rem;
-      padding: 0.55rem 0.8rem;
-      border-radius: var(--r); font-size: 0.8rem;
-      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.75rem 1rem; font-size: 0.85rem;
+      display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
     }
-    .notice.warn { background: rgba(251,191,36,.07); border: 1px solid rgba(251,191,36,.25); color: var(--yellow); }
+    .notice > span { flex: 1; }
+    .notice.warn   { background: rgba(217,119,6,.06);  border-bottom: 1px solid rgba(217,119,6,.2);  color: var(--yellow); }
+    .notice.info   { background: rgba(37,99,235,.06);  border-bottom: 1px solid rgba(37,99,235,.2);  color: var(--accent); }
+    .notice.danger { background: rgba(220,38,38,.06);  border-bottom: 1px solid rgba(220,38,38,.2);  color: var(--red); }
+    .inline-notice { border-radius: var(--r); border: 1px solid; }
 
-    /* ── Empty state ─────────────────────────────────────────────── */
+    /* ── Empty state ──────────────────────────────────────────────────────── */
     .empty {
       padding: 3rem 1.5rem; text-align: center;
-      color: var(--muted); font-size: 0.85rem;
+      color: var(--muted); font-size: 0.875rem;
       display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
     }
-    .empty svg { opacity: .25; width: 40px; height: 40px; }
+    .empty svg { opacity: .2; }
 
-    /* ── File list ───────────────────────────────────────────────── */
-    .file-item { border-bottom: 1px solid var(--border); padding: 0.8rem 1.125rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    /* ── File list ────────────────────────────────────────────────────────── */
+    .file-item {
+      border-bottom: 1px solid var(--border);
+      padding: 0.875rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+    }
     .file-item:last-child { border-bottom: none; }
+    .file-item.fi-deleted .file-name { text-decoration: line-through; opacity: .55; }
 
-    .file-row { display: flex; align-items: center; gap: 0.6rem; }
-    .file-check { flex-shrink: 0; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
-    .file-name { font-family: var(--mono); font-size: 0.8rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-meta { font-size: 0.75rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .file-row { display: flex; align-items: flex-start; gap: 0.6rem; }
+    .file-check { flex-shrink: 0; accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; margin-top: 2px; }
+    .file-info  { flex: 1; min-width: 0; }
+    .file-name  { font-family: var(--mono); font-size: 0.82rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-meta  { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+    .file-badges { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.25rem; }
 
     .badge {
-      font-size: 0.68rem; font-weight: 700; padding: 0.15rem 0.45rem;
-      border-radius: 100px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; flex-shrink: 0;
+      font-size: 0.68rem; font-weight: 700; padding: 0.18rem 0.5rem;
+      border-radius: 100px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
     }
-    .badge-pending  { background: var(--surface2); color: var(--muted); }
-    .badge-uploading { background: rgba(79,126,248,.15); color: var(--accent); }
-    .badge-done     { background: rgba(52,211,153,.15); color: var(--green); }
-    .badge-error    { background: rgba(248,113,113,.15); color: var(--red); }
+    .badge-pending     { background: var(--surface2); color: var(--muted); }
+    .badge-converting  { background: rgba(37,99,235,.1); color: var(--accent); }
+    .badge-transcribing{ background: rgba(37,99,235,.1); color: var(--accent); }
+    .badge-done        { background: rgba(5,150,105,.1); color: var(--green); }
+    .badge-error       { background: rgba(220,38,38,.1); color: var(--red); }
+    .badge-deleted     { background: var(--surface2); color: var(--muted); }
 
     .progress-bar  { height: 2px; background: var(--border); border-radius: 1px; overflow: hidden; }
-    .progress-fill { height: 100%; background: var(--accent); border-radius: 1px; animation: indeterminate 1.4s ease infinite; }
+    .progress-fill {
+      height: 100%; background: var(--accent); border-radius: 1px;
+      animation: indeterminate 1.4s ease infinite; transform-origin: left;
+    }
     @keyframes indeterminate {
-      0%   { transform: translateX(-100%) scaleX(.5); }
-      50%  { transform: translateX(0%)   scaleX(.8); }
-      100% { transform: translateX(100%) scaleX(.5); }
+      0%   { transform: translateX(-100%) scaleX(.4); }
+      50%  { transform: translateX(60%)  scaleX(.8); }
+      100% { transform: translateX(200%) scaleX(.4); }
     }
 
     .transcript {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r);
-      padding: 0.7rem 0.9rem; font-size: 0.83rem; line-height: 1.65;
-      white-space: pre-wrap; word-break: break-word;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.875rem 1rem; font-size: 0.875rem; line-height: 1.7;
+      max-width: 65ch; white-space: pre-wrap; word-break: break-word;
     }
-    .transcript.mono { font-family: var(--mono); font-size: 0.78rem; }
-    .tx-actions { display: flex; gap: 0.5rem; }
+    .tx-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
     .error-msg {
-      font-size: 0.78rem; color: var(--red);
-      background: rgba(248,113,113,.07); border: 1px solid rgba(248,113,113,.2);
-      border-radius: var(--r); padding: 0.5rem 0.7rem;
+      font-size: 0.8rem; color: var(--red);
+      background: rgba(220,38,38,.06); border: 1px solid rgba(220,38,38,.15);
+      border-radius: 8px; padding: 0.6rem 0.875rem;
       display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap;
     }
     .error-msg span { flex: 1; }
 
-    /* ── Export ──────────────────────────────────────────────────── */
-    .export-bar {
-      padding: 0.875rem 1.125rem;
-      display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+    /* ── Model download ───────────────────────────────────────────────────── */
+    .download-progress {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.875rem; display: flex; flex-direction: column; gap: 0.5rem;
     }
-    .export-bar span { font-size: 0.8rem; color: var(--muted); }
+    .download-bar  { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .download-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+    .download-label { font-size: 0.8rem; color: var(--muted); }
+
+    /* ── History ──────────────────────────────────────────────────────────── */
+    .history-item {
+      border-bottom: 1px solid var(--border);
+      padding: 0.875rem 1rem; display: flex; flex-direction: column; gap: 0.4rem;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+    .history-filename { font-family: var(--mono); font-size: 0.82rem; font-weight: 500; }
+    .history-date     { font-size: 0.72rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .history-preview  { font-size: 0.82rem; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .history-full     { font-size: 0.875rem; line-height: 1.7; white-space: pre-wrap; display: none; }
+    .history-item.expanded .history-preview { display: none; }
+    .history-item.expanded .history-full { display: block; }
+    .history-actions  { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.2rem; }
+
+    /* ── Sticky action bar ────────────────────────────────────────────────── */
+    .action-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      display: none; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .action-bar.visible { display: flex; }
+    .action-bar .btn-primary { flex: 1; }
+
+    @media (min-width: 640px) {
+      .action-bar {
+        left: 50%; transform: translateX(-50%);
+        max-width: 800px;
+        border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      }
+    }
   </style>
 </head>
 <body>
 
-<!-- Non-Chromium warning -->
-<div id="browser-warning">
+<!-- Compat warning (shown before JS if needed) -->
+<div id="compat-warning">
   <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--yellow)">
     <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
     <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
   </svg>
-  <h1>Chromium-based browser required</h1>
-  <p>This app uses the File System Access API, which is only supported in Chrome, Edge, and Brave. Please reopen this page in one of those browsers.</p>
+  <h1 id="compat-title">Incompatible browser</h1>
+  <p id="compat-msg"></p>
 </div>
 
 <!-- App -->
 <div id="app">
 
-  <!-- Settings drawer -->
+  <!-- Settings overlay -->
   <div class="overlay" id="overlay">
     <div class="drawer">
+      <div class="drawer-handle"></div>
       <div class="drawer-head">
         <h2>Settings</h2>
-        <button class="icon-btn" id="close-settings" aria-label="Close">
+        <button class="icon-btn" id="close-settings" aria-label="Close settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <div class="field">
-        <label for="s-url">API Base URL <span style="color:var(--red)">*</span></label>
-        <input id="s-url" type="url" placeholder="https://parakeet.yourdomain.com/v1">
-        <span class="hint">Must expose POST /audio/transcriptions (OpenAI-compatible)</span>
-      </div>
-
-      <div class="field">
-        <label for="s-key">API Key</label>
-        <input id="s-key" type="password" placeholder="Leave blank if not required">
-      </div>
-
-      <div class="field">
-        <label for="s-model">Model</label>
-        <input id="s-model" type="text" placeholder="whisper-1">
-      </div>
+      <div class="section-label">Transcription</div>
 
       <div class="field">
         <label for="s-lang">Language</label>
         <input id="s-lang" type="text" placeholder="en" maxlength="10">
-        <span class="hint">ISO 639-1 code, e.g. en, sv, fr. Leave blank to auto-detect.</span>
+        <span class="hint">ISO 639-1 code (en, sv, fr…). Leave blank to auto-detect.</span>
       </div>
 
-      <div class="field">
-        <label for="s-fmt">Response Format</label>
-        <select id="s-fmt">
-          <option value="text">text</option>
-          <option value="json">json</option>
-          <option value="verbose_json">verbose_json</option>
-          <option value="srt">srt</option>
-          <option value="vtt">vtt</option>
-        </select>
+      <div class="section-label">Silence Removal (VAD)</div>
+
+      <div class="field check-row">
+        <input id="s-vad" type="checkbox">
+        <label for="s-vad">Remove silent sections before transcription</label>
       </div>
+      <div id="vad-fields">
+        <div class="field" style="margin-top:.6rem">
+          <label for="s-thresh">RMS Threshold</label>
+          <input id="s-thresh" type="number" step="0.001" min="0" max="1" placeholder="0.01">
+          <span class="hint">Energy below this level is treated as silence</span>
+        </div>
+        <div class="field" style="margin-top:.6rem">
+          <label for="s-padding">Padding (ms)</label>
+          <input id="s-padding" type="number" step="10" min="0" placeholder="200">
+          <span class="hint">Audio retained around voiced regions</span>
+        </div>
+        <div class="field" style="margin-top:.6rem">
+          <label for="s-silence">Min silence gap (ms)</label>
+          <input id="s-silence" type="number" step="10" min="0" placeholder="300">
+          <span class="hint">Minimum gap before it is removed</span>
+        </div>
+      </div>
+
+      <div class="section-label">Storage</div>
+
+      <div class="field check-row">
+        <input id="s-autosave" type="checkbox">
+        <label for="s-autosave">Auto-save transcriptions to history</label>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.4rem">
+        <div class="storage-bar"><div class="storage-fill" id="storage-fill" style="width:0%"></div></div>
+        <div class="storage-info" id="storage-info">Calculating…</div>
+        <button class="btn btn-danger btn-sm" id="btn-clear-history" style="align-self:flex-start">Clear History</button>
+      </div>
+
+      <div class="section-label">Drive</div>
 
       <div class="field check-row">
         <input id="s-delete" type="checkbox">
-        <label for="s-delete">Delete files from drive after successful transcription</label>
+        <label for="s-delete">Delete source files after transcription</label>
+      </div>
+      <p class="hint">Files are deleted per-file immediately after transcription succeeds and is saved to history. You will be asked to confirm before each batch.</p>
+
+      <div class="section-label">Connectors — Notion</div>
+
+      <div class="field">
+        <label for="s-notion-key">Integration Token</label>
+        <input id="s-notion-key" type="password" placeholder="secret_…">
+      </div>
+      <div class="field">
+        <label for="s-notion-id">Target Page or Database ID</label>
+        <input id="s-notion-id" type="text" placeholder="32-character ID">
       </div>
 
-      <button class="btn btn-primary" id="save-settings">Save</button>
+      <div class="section-label">Connectors — Obsidian</div>
+
+      <div class="field">
+        <label for="s-obsidian">Vault Name</label>
+        <input id="s-obsidian" type="text" placeholder="My Vault">
+        <span class="hint">Opens a new note via obsidian:// URI. Obsidian must be running locally.</span>
+      </div>
+
+      <div class="section-label">Connectors — Coming Soon</div>
+      <p class="hint" style="padding-bottom:.25rem">Claude · ChatGPT · Custom Webhook</p>
+
+      <button class="btn btn-primary" id="save-settings">Save Settings</button>
     </div>
   </div>
 
   <!-- Header -->
   <header>
     <h1>DJI Mic 2 Transcriber</h1>
-    <div class="header-right">
-      <div class="api-status">
-        <div class="dot" id="api-dot"></div>
-        <span id="api-label">No API configured</span>
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <div class="model-status">
+        <div class="model-dot" id="model-dot"></div>
+        <span id="model-label">Model not downloaded</span>
       </div>
       <button class="icon-btn" id="open-settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
         </svg>
+        <span>Settings</span>
       </button>
     </div>
   </header>
 
   <main>
-    <!-- Recordings panel -->
+
+    <!-- Model download panel -->
+    <div class="panel" id="model-panel" style="display:none">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Parakeet Model Required</div>
+          <div class="panel-meta">One-time ~640 MB download · Cached in browser · No audio ever leaves your device</div>
+        </div>
+      </div>
+      <div style="padding:1rem;display:flex;flex-direction:column;gap:.875rem">
+        <p style="font-size:.875rem;color:var(--muted);line-height:1.65">
+          Transcription runs entirely in your browser using the Parakeet TDT 0.6B model via WebGPU and WASM.
+          The model (~640 MB) is downloaded once and cached locally in your browser.
+        </p>
+        <div id="download-progress" class="download-progress" style="display:none">
+          <div class="download-bar"><div class="download-fill" id="download-fill" style="width:0%"></div></div>
+          <div class="download-label" id="download-label">Preparing…</div>
+        </div>
+        <button class="btn btn-primary" id="btn-download" style="align-self:flex-start">
+          Download Model (~640 MB)
+        </button>
+      </div>
+    </div>
+
+    <!-- WebGPU unavailable notice -->
+    <div class="notice warn inline-notice" id="webgpu-notice" style="display:none;border-radius:var(--r)">
+      <span>WebGPU is not available. In-browser transcription requires a WebGPU-capable GPU. Check <code>chrome://gpu</code> for status.</span>
+    </div>
+
+    <!-- Files panel -->
     <div class="panel">
       <div class="panel-head">
         <div>
           <div class="panel-title">Recordings</div>
           <div class="panel-meta" id="drive-meta">No drive selected</div>
         </div>
-        <div class="panel-actions">
-          <button class="btn btn-ghost" id="btn-select">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-            Select DJI Drive
-          </button>
-          <button class="btn btn-primary" id="btn-transcribe" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Transcribe Selected
-          </button>
-        </div>
+        <button class="btn btn-ghost" id="btn-select">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          Select DJI Drive
+        </button>
       </div>
 
-      <div id="api-notice" class="notice warn" style="display:none">
-        API Base URL not configured.
-        <button class="btn btn-sm btn-ghost" onclick="openSettings()">Open Settings</button>
+      <!-- Delete confirmation banner -->
+      <div class="notice danger" id="delete-banner" style="display:none">
+        <span>Source files will be deleted from the DJI drive after each successful transcription. This cannot be undone.</span>
+        <button class="btn btn-ghost btn-sm" id="btn-proceed">Proceed</button>
+        <button class="btn btn-ghost btn-sm" id="btn-cancel">Cancel</button>
       </div>
 
       <div id="file-list">
         <div class="empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
           Select the DJI Mic 2 drive to list recordings
         </div>
       </div>
     </div>
 
-    <!-- Export panel (shown after first transcription completes) -->
-    <div class="panel" id="export-panel" style="display:none">
-      <div class="export-bar">
-        <span>Export all transcriptions:</span>
-        <button class="btn btn-ghost btn-sm" id="btn-export-txt">Export .txt</button>
-        <button class="btn btn-ghost btn-sm" id="btn-export-md">Export .md</button>
+    <!-- History panel -->
+    <div class="panel" id="history-panel" style="display:none">
+      <div class="panel-head">
+        <div class="panel-title">History</div>
       </div>
+      <div id="history-list"></div>
     </div>
+
   </main>
+
+  <!-- Sticky batch action bar -->
+  <div class="action-bar" id="action-bar">
+    <button class="btn btn-ghost btn-sm" id="btn-select-all" style="white-space:nowrap">Select all</button>
+    <button class="btn btn-primary" id="btn-transcribe" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Transcribe Selected
+    </button>
+    <button class="btn btn-ghost" id="btn-export-txt" disabled>.txt</button>
+    <button class="btn btn-ghost" id="btn-export-md"  disabled>.md</button>
+    <button class="btn btn-ghost" id="btn-share" style="display:none">Share</button>
+  </div>
+
 </div>
 
 <script>
-// ── Settings ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// PARAKEET.JS INTEGRATION
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// parakeet.js is a community port of NVIDIA Parakeet TDT 0.6B for in-browser
+// inference via WebGPU (encoder) + WASM (decoder).
+//
+// Library: parakeet.js by ysdede — https://huggingface.co/spaces/ysdede/parakeet.js-demo
+// Discussion: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2/discussions/56
+//
+// To complete this integration:
+//   1. Confirm the library's CDN/script URL and pin to a specific version
+//   2. Confirm the JS API: what function is called, what it accepts (ArrayBuffer? Float32Array?),
+//      and what it returns (string? Promise<string>?)
+//   3. Pin MODEL_BASE_URL to a specific Hugging Face commit hash — never use `main`
+//   4. Update initParakeet() to load the script and initialise the model from cache
+//   5. Update runParakeet() to call the actual transcription function
+//
+// Until then, transcription will throw a descriptive error.
+// ──────────────────────────────────────────────────────────────────────────────
+
+const MODEL_CACHE    = 'parakeet-models-v1';
+const MODEL_BASE_URL = 'REPLACE_WITH_PINNED_HF_REVISION_URL';
+const MODEL_FILES    = ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx'];
+const MODEL_TOTAL_BYTES = 640 * 1024 * 1024;
+
+let parakeetReady = false;
+
+async function initParakeet() {
+  // TODO: load parakeet.js script, initialise model from Cache API files
+  // Example (API TBC):
+  //   await loadScript('https://cdn.example.com/parakeet.js@1.0.0/parakeet.min.js');
+  //   await Parakeet.init({ cacheKey: MODEL_CACHE, files: MODEL_FILES });
+  //   parakeetReady = true;
+  console.warn('parakeet.js not yet integrated — see integration note at top of script');
+}
+
+async function runParakeet(wavArrayBuffer) {
+  if (!parakeetReady) {
+    throw new Error(
+      'parakeet.js integration is not yet complete. ' +
+      'See the PARAKEET.JS INTEGRATION comment at the top of the script in index.html.'
+    );
+  }
+  // TODO: return await Parakeet.transcribe(wavArrayBuffer);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULTS = {
-  api_base_url: '',
-  api_key: '',
-  model: 'whisper-1',
   language: 'en',
-  response_format: 'text',
+  vad_enabled: true,
+  vad_threshold: 0.01,
+  vad_padding_ms: 200,
+  vad_min_silence_ms: 300,
   delete_after_transcription: false,
+  auto_save: true,
+  notion_api_key: '',
+  notion_target_id: '',
+  obsidian_vault_name: '',
 };
 
 let cfg = (() => {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('tj') || '{}') }; }
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('tj_cfg') || '{}') }; }
   catch { return { ...DEFAULTS }; }
 })();
 
-function saveCfg() {
-  localStorage.setItem('tj', JSON.stringify(cfg));
-}
+function saveCfg() { localStorage.setItem('tj_cfg', JSON.stringify(cfg)); }
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════════════════
 
 let dirHandle = null;
-let files = [];   // { handle, name, path, size, mtime, selected, status, transcript, error }
-let busy = false;
+let files     = []; // { handle, name, path, size, mtime, selected, status, deleted, transcript, error, savedId }
+let busy      = false;
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// BOOT + COMPAT CHECK
+// ══════════════════════════════════════════════════════════════════════════════
 
-if (!('showDirectoryPicker' in window)) {
-  document.getElementById('browser-warning').style.display = 'flex';
+const hasFilePicker = 'showDirectoryPicker' in window;
+const hasWebGPU     = 'gpu' in navigator;
+
+if (!hasFilePicker) {
+  const el = document.getElementById('compat-warning');
+  el.style.display = 'flex';
+  document.getElementById('compat-title').textContent = 'Chromium-based browser required';
+  document.getElementById('compat-msg').textContent =
+    'This app uses the File System Access API, which is only supported in Chrome, Edge, and Brave. Please open this page in one of those browsers.';
 } else {
   const app = document.getElementById('app');
   app.style.display = 'flex';
@@ -380,92 +607,278 @@ if (!('showDirectoryPicker' in window)) {
 
 function boot() {
   syncSettingsForm();
-  checkApi();
-  syncApiNotice();
+  updateStorageDisplay();
+  checkWebGPUNotice();
+  checkModelCache();
+  renderHistory();
 
   document.getElementById('open-settings').onclick  = openSettings;
   document.getElementById('close-settings').onclick = closeSettings;
   document.getElementById('overlay').onclick = e => { if (e.target === e.currentTarget) closeSettings(); };
-  document.getElementById('save-settings').onclick  = onSave;
-  document.getElementById('btn-select').onclick      = pickDrive;
-  document.getElementById('btn-transcribe').onclick  = runTranscription;
-  document.getElementById('btn-export-txt').onclick  = () => exportAll('txt');
-  document.getElementById('btn-export-md').onclick   = () => exportAll('md');
+  document.getElementById('save-settings').onclick  = onSaveSettings;
+  document.getElementById('btn-clear-history').onclick = clearHistory;
+
+  document.getElementById('btn-select').onclick     = pickDrive;
+  document.getElementById('btn-select-all').onclick = toggleSelectAll;
+  document.getElementById('btn-transcribe').onclick = requestBatch;
+  document.getElementById('btn-proceed').onclick    = () => { document.getElementById('delete-banner').style.display = 'none'; startBatch(); };
+  document.getElementById('btn-cancel').onclick     = () => { document.getElementById('delete-banner').style.display = 'none'; };
+
+  document.getElementById('btn-download').onclick   = downloadModel;
+  document.getElementById('btn-export-txt').onclick = () => exportAll('txt');
+  document.getElementById('btn-export-md').onclick  = () => exportAll('md');
+  document.getElementById('btn-share').onclick      = shareAll;
+
+  if (navigator.share) document.getElementById('btn-share').style.display = '';
+
+  document.getElementById('s-vad').addEventListener('change', syncVadFields);
+  syncVadFields();
 }
 
-// ── Settings panel ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// SETTINGS PANEL
+// ══════════════════════════════════════════════════════════════════════════════
 
-function openSettings() { document.getElementById('overlay').classList.add('open'); }
+function openSettings()  { document.getElementById('overlay').classList.add('open'); updateStorageDisplay(); }
 function closeSettings() { document.getElementById('overlay').classList.remove('open'); }
 
 function syncSettingsForm() {
-  document.getElementById('s-url').value    = cfg.api_base_url;
-  document.getElementById('s-key').value    = cfg.api_key;
-  document.getElementById('s-model').value  = cfg.model;
-  document.getElementById('s-lang').value   = cfg.language;
-  document.getElementById('s-fmt').value    = cfg.response_format;
-  document.getElementById('s-delete').checked = cfg.delete_after_transcription;
+  document.getElementById('s-lang').value    = cfg.language;
+  document.getElementById('s-vad').checked   = cfg.vad_enabled;
+  document.getElementById('s-thresh').value  = cfg.vad_threshold;
+  document.getElementById('s-padding').value = cfg.vad_padding_ms;
+  document.getElementById('s-silence').value = cfg.vad_min_silence_ms;
+  document.getElementById('s-autosave').checked = cfg.auto_save;
+  document.getElementById('s-delete').checked   = cfg.delete_after_transcription;
+  document.getElementById('s-notion-key').value = cfg.notion_api_key;
+  document.getElementById('s-notion-id').value  = cfg.notion_target_id;
+  document.getElementById('s-obsidian').value   = cfg.obsidian_vault_name;
+  syncVadFields();
 }
 
-function onSave() {
+function syncVadFields() {
+  const on = document.getElementById('s-vad').checked;
+  const container = document.getElementById('vad-fields');
+  container.style.opacity = on ? '1' : '.4';
+  container.querySelectorAll('input').forEach(el => el.disabled = !on);
+}
+
+function onSaveSettings() {
+  const prevDelete = cfg.delete_after_transcription;
   cfg = {
-    api_base_url: document.getElementById('s-url').value.trim().replace(/\/$/, ''),
-    api_key:      document.getElementById('s-key').value.trim(),
-    model:        document.getElementById('s-model').value.trim() || DEFAULTS.model,
-    language:     document.getElementById('s-lang').value.trim(),
-    response_format:             document.getElementById('s-fmt').value,
-    delete_after_transcription:  document.getElementById('s-delete').checked,
+    language:                   document.getElementById('s-lang').value.trim(),
+    vad_enabled:                document.getElementById('s-vad').checked,
+    vad_threshold:              parseFloat(document.getElementById('s-thresh').value)  || DEFAULTS.vad_threshold,
+    vad_padding_ms:             parseInt(document.getElementById('s-padding').value)   || DEFAULTS.vad_padding_ms,
+    vad_min_silence_ms:         parseInt(document.getElementById('s-silence').value)   || DEFAULTS.vad_min_silence_ms,
+    auto_save:                  document.getElementById('s-autosave').checked,
+    delete_after_transcription: document.getElementById('s-delete').checked,
+    notion_api_key:             document.getElementById('s-notion-key').value.trim(),
+    notion_target_id:           document.getElementById('s-notion-id').value.trim(),
+    obsidian_vault_name:        document.getElementById('s-obsidian').value.trim(),
   };
+
+  if (!prevDelete && cfg.delete_after_transcription) {
+    // alert() cannot be bypassed by clicking outside — satisfies spec requirement
+    alert(
+      'Delete after transcription enabled.\n\n' +
+      'Source WAV files will be permanently deleted from your DJI drive after each successful transcription. ' +
+      'Ensure the drive is not your only copy of these recordings.'
+    );
+  }
+
   saveCfg();
   closeSettings();
-  checkApi();
-  syncApiNotice();
-  syncTranscribeBtn();
+  syncActionBar();
 }
 
-// ── API status ────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// STORAGE + HISTORY (localStorage)
+// ══════════════════════════════════════════════════════════════════════════════
 
-let apiTimer = null;
+const TX_PREFIX = 'transcription:';
+const TX_INDEX  = 'transcription:index';
 
-function checkApi() {
-  const dot   = document.getElementById('api-dot');
-  const label = document.getElementById('api-label');
-  if (!cfg.api_base_url) {
-    dot.className = 'dot';
-    label.textContent = 'No API configured';
+function getIndex() {
+  try { return JSON.parse(localStorage.getItem(TX_INDEX) || '[]'); }
+  catch { return []; }
+}
+
+function saveTx(entry) {
+  const idx = getIndex();
+  idx.unshift(entry.id);
+  localStorage.setItem(TX_INDEX, JSON.stringify(idx));
+  localStorage.setItem(`${TX_PREFIX}${entry.id}`, JSON.stringify(entry));
+}
+
+function getTx(id) {
+  try { return JSON.parse(localStorage.getItem(`${TX_PREFIX}${id}`) || 'null'); }
+  catch { return null; }
+}
+
+function updateTx(id, patch) {
+  const entry = getTx(id);
+  if (!entry) return;
+  localStorage.setItem(`${TX_PREFIX}${id}`, JSON.stringify({ ...entry, ...patch }));
+}
+
+function removeTx(id) {
+  localStorage.setItem(TX_INDEX, JSON.stringify(getIndex().filter(x => x !== id)));
+  localStorage.removeItem(`${TX_PREFIX}${id}`);
+}
+
+function allTx() {
+  return getIndex().map(id => getTx(id)).filter(Boolean);
+}
+
+function genId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
+}
+
+async function updateStorageDisplay() {
+  let used = 0, total = 5 * 1024 * 1024;
+  if (navigator.storage?.estimate) {
+    try { ({ usage: used, quota: total } = await navigator.storage.estimate()); }
+    catch {}
+  } else {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      used += (k.length + (localStorage.getItem(k) || '').length) * 2;
+    }
+  }
+
+  const pct  = Math.min(100, (used / total) * 100);
+  const fill = document.getElementById('storage-fill');
+  const info = document.getElementById('storage-info');
+  if (fill) { fill.style.width = `${pct}%`; fill.className = `storage-fill${pct > 80 ? ' warn' : ''}`; }
+  if (info) info.textContent = `${fmtBytes(used)} used of ~${fmtBytes(total)}${pct > 80 ? ' — running low' : ''}`;
+}
+
+async function clearHistory() {
+  if (!confirm('Delete all saved transcriptions? Source audio files are not affected.')) return;
+  getIndex().forEach(id => localStorage.removeItem(`${TX_PREFIX}${id}`));
+  localStorage.removeItem(TX_INDEX);
+  renderHistory();
+  updateStorageDisplay();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODEL MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+function checkWebGPUNotice() {
+  if (!hasWebGPU) document.getElementById('webgpu-notice').style.display = 'flex';
+}
+
+async function checkModelCache() {
+  const dot   = document.getElementById('model-dot');
+  const label = document.getElementById('model-label');
+  const panel = document.getElementById('model-panel');
+
+  if (MODEL_BASE_URL === 'REPLACE_WITH_PINNED_HF_REVISION_URL') {
+    dot.className   = 'model-dot missing';
+    label.textContent = 'Integration pending';
+    panel.style.display = 'block';
     return;
   }
-  dot.className = 'dot checking';
-  label.textContent = 'Checking…';
-  clearTimeout(apiTimer);
-  apiTimer = setTimeout(async () => {
-    try {
-      const headers = cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {};
-      await fetch(cfg.api_base_url, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
-      dot.className = 'dot ok';
-      label.textContent = 'API reachable';
-    } catch {
-      dot.className = 'dot err';
-      label.textContent = 'API unreachable';
+
+  try {
+    const cache  = await caches.open(MODEL_CACHE);
+    const checks = await Promise.all(MODEL_FILES.map(f => cache.match(`${MODEL_BASE_URL}/${f}`)));
+    if (checks.every(Boolean)) {
+      dot.className     = 'model-dot loading';
+      label.textContent = 'Loading model…';
+      panel.style.display = 'none';
+      await initParakeet();
+      dot.className     = 'model-dot cached';
+      label.textContent = 'Model ready';
+    } else {
+      dot.className     = 'model-dot missing';
+      label.textContent = 'Model not downloaded';
+      panel.style.display = 'block';
     }
-  }, 400);
+  } catch (e) {
+    dot.className     = 'model-dot missing';
+    label.textContent = 'Model unavailable';
+    panel.style.display = 'block';
+    console.error('Cache check failed:', e);
+  }
 }
 
-function syncApiNotice() {
-  document.getElementById('api-notice').style.display = cfg.api_base_url ? 'none' : 'flex';
+async function downloadModel() {
+  const btn   = document.getElementById('btn-download');
+  const prog  = document.getElementById('download-progress');
+  const fill  = document.getElementById('download-fill');
+  const dlLbl = document.getElementById('download-label');
+  const dot   = document.getElementById('model-dot');
+  const label = document.getElementById('model-label');
+
+  btn.disabled = true;
+  prog.style.display = 'block';
+  dot.className      = 'model-dot loading';
+  label.textContent  = 'Downloading…';
+
+  try {
+    const cache = await caches.open(MODEL_CACHE);
+    let totalReceived = 0;
+
+    for (let i = 0; i < MODEL_FILES.length; i++) {
+      const filename = MODEL_FILES[i];
+      const url = `${MODEL_BASE_URL}/${filename}`;
+      dlLbl.textContent = `Downloading ${filename} (${i + 1}/${MODEL_FILES.length})…`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed to download ${filename}: HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        totalReceived += value.length;
+        fill.style.width = `${Math.min(99, (totalReceived / MODEL_TOTAL_BYTES) * 100)}%`;
+      }
+
+      const merged = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
+      let offset = 0;
+      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
+      await cache.put(url, new Response(merged, { headers: { 'content-type': 'application/octet-stream' } }));
+    }
+
+    fill.style.width  = '100%';
+    dlLbl.textContent = 'Loading model…';
+    await initParakeet();
+
+    dot.className     = 'model-dot cached';
+    label.textContent = 'Model ready';
+    document.getElementById('model-panel').style.display = 'none';
+    syncActionBar();
+  } catch (e) {
+    dlLbl.textContent  = `Failed: ${e.message}`;
+    dot.className      = 'model-dot missing';
+    label.textContent  = 'Download failed';
+    btn.disabled       = false;
+  }
 }
 
-// ── Drive picker ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// DRIVE PICKER
+// ══════════════════════════════════════════════════════════════════════════════
 
 async function pickDrive() {
   try {
     const mode = cfg.delete_after_transcription ? 'readwrite' : 'read';
-    dirHandle = await window.showDirectoryPicker({ mode });
-    files = [];
+    dirHandle  = await window.showDirectoryPicker({ mode });
+    files      = [];
     await scan(dirHandle, '');
     files.sort((a, b) => a.path.localeCompare(b.path));
-    renderList();
-    syncTranscribeBtn();
+    renderFileList();
+    syncActionBar();
   } catch (e) {
     if (e.name !== 'AbortError') console.error(e);
   }
@@ -477,226 +890,485 @@ async function scan(handle, prefix) {
     if (entry.kind === 'file' && name.toLowerCase().endsWith('.wav')) {
       const file = await entry.getFile();
       files.push({ handle: entry, name, path, size: file.size, mtime: file.lastModified,
-                   selected: true, status: 'pending', transcript: null, error: null });
+                   selected: true, status: 'pending', deleted: false,
+                   transcript: null, error: null, savedId: null });
     } else if (entry.kind === 'directory') {
       await scan(entry, path);
     }
   }
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIO PIPELINE
+// ══════════════════════════════════════════════════════════════════════════════
 
-const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : `${(b/1048576).toFixed(1)} MB`;
-// WAV 48kHz 24-bit stereo ≈ 17 MB/min
-const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
-const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function isAlready16kMono16bit(buf) {
+  if (buf.byteLength < 36) return false;
+  const v   = new DataView(buf);
+  const str = (off, n) => Array.from({ length: n }, (_, i) => String.fromCharCode(v.getUint8(off + i))).join('');
+  if (str(0, 4) !== 'RIFF' || str(8, 4) !== 'WAVE') return false;
+  return (
+    v.getUint16(20, true) === 1  &&  // PCM
+    v.getUint16(22, true) === 1  &&  // mono
+    v.getUint32(24, true) === 16000 &&
+    v.getUint16(34, true) === 16
+  );
+}
 
-const BADGE = {
-  pending:   ['badge-pending',   'Pending'],
-  uploading: ['badge-uploading', 'Uploading'],
-  done:      ['badge-done',      'Done'],
-  error:     ['badge-error',     'Error'],
-};
-
-function renderList() {
-  const container = document.getElementById('file-list');
-  const meta      = document.getElementById('drive-meta');
-
-  if (!files.length) {
-    container.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>No WAV files found on this drive</div>`;
-    meta.textContent = dirHandle ? `${dirHandle.name} — 0 files` : 'No drive selected';
-    return;
+async function convertToParakeetFormat(arrayBuffer) {
+  if (isAlready16kMono16bit(arrayBuffer)) {
+    // Still apply VAD if enabled; skip format conversion
+    if (!cfg.vad_enabled) return arrayBuffer;
+    const ctx = new AudioContext({ sampleRate: 16000 });
+    const buf = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    await ctx.close();
+    const float32 = removeSilence(buf.getChannelData(0), 16000);
+    const int16   = pcmEncode(float32);
+    return encodeWav(int16, 16000);
   }
 
-  const selSize = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
-  const totSize = files.reduce((a, f) => a + f.size, 0);
-  meta.textContent = `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} total · ${fmtDur(selSize)} selected`;
+  // Decode (handles 24-bit PCM, 32-bit float, any sample rate)
+  const audioCtx   = new AudioContext();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+  await audioCtx.close();
 
-  container.innerHTML = files.map((f, i) => itemHTML(f, i)).join('');
+  // Resample to 16kHz mono
+  const targetRate = 16000;
+  const numFrames  = Math.ceil(audioBuffer.duration * targetRate);
+  const offCtx     = new OfflineAudioContext(1, numFrames, targetRate);
+  const src        = offCtx.createBufferSource();
+  src.buffer       = audioBuffer;
+  src.connect(offCtx.destination);
+  src.start();
+  const rendered = await offCtx.startRendering();
 
-  container.querySelectorAll('.file-check').forEach(cb => {
-    cb.addEventListener('change', e => {
-      files[+e.target.dataset.i].selected = e.target.checked;
-      syncTranscribeBtn();
-      syncMeta();
-    });
-  });
+  let float32 = rendered.getChannelData(0);
+  if (cfg.vad_enabled) float32 = removeSilence(float32, targetRate);
 
-  syncExportPanel();
+  return encodeWav(pcmEncode(float32), targetRate);
 }
 
-function itemHTML(f, i) {
-  const [bc, bl] = BADGE[f.status] || BADGE.pending;
-  const isMono = ['srt','vtt'].includes(cfg.response_format);
-  return `
-    <div class="file-item" id="fi-${i}">
-      <div class="file-row">
-        <input type="checkbox" class="file-check" data-i="${i}" ${f.selected?'checked':''} ${busy?'disabled':''}>
-        <span class="file-name" title="${esc(f.path)}">${esc(f.path)}</span>
-        <span class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)} · ${fmtDate(f.mtime)}</span>
-        <span class="badge ${bc}">${bl}</span>
-      </div>
-      ${f.status === 'uploading' ? `<div class="progress-bar"><div class="progress-fill"></div></div>` : ''}
-      ${f.transcript !== null ? `
-        <div class="transcript${isMono?' mono':''}">${esc(f.transcript)}</div>
-        <div class="tx-actions">
-          <button class="btn btn-ghost btn-sm" onclick="copyTx(${i})">Copy</button>
-        </div>` : ''}
-      ${f.error ? `
-        <div class="error-msg">
-          <span>${esc(f.error)}</span>
-          <button class="btn btn-ghost btn-sm" onclick="retryOne(${i})">Retry</button>
-        </div>` : ''}
-    </div>`;
+function removeSilence(float32, sampleRate) {
+  const chunkMs      = 20;
+  const chunkSize    = Math.floor(sampleRate * chunkMs / 1000);
+  const padChunks    = Math.ceil(cfg.vad_padding_ms / chunkMs);
+  const minSilChunks = Math.ceil(cfg.vad_min_silence_ms / chunkMs);
+  const threshold    = cfg.vad_threshold;
+
+  // Classify voiced/silent
+  const voiced = [];
+  for (let i = 0; i < float32.length; i += chunkSize) {
+    const chunk = float32.subarray(i, i + chunkSize);
+    const rms   = Math.sqrt(chunk.reduce((s, x) => s + x * x, 0) / chunk.length);
+    voiced.push(rms >= threshold);
+  }
+
+  // Expand voiced by padding
+  const padded = voiced.slice();
+  for (let i = 0; i < voiced.length; i++) {
+    if (voiced[i]) {
+      const lo = Math.max(0, i - padChunks);
+      const hi = Math.min(voiced.length, i + padChunks + 1);
+      for (let j = lo; j < hi; j++) padded[j] = true;
+    }
+  }
+
+  // Fill short silence gaps
+  let run = 0;
+  for (let i = 0; i <= padded.length; i++) {
+    if (i < padded.length && !padded[i]) {
+      run++;
+    } else {
+      if (run > 0 && run < minSilChunks) {
+        for (let j = i - run; j < i; j++) padded[j] = true;
+      }
+      run = 0;
+    }
+  }
+
+  // Concatenate voiced chunks
+  const parts = [];
+  for (let i = 0; i < padded.length; i++) {
+    if (padded[i]) parts.push(float32.subarray(i * chunkSize, Math.min((i + 1) * chunkSize, float32.length)));
+  }
+  if (!parts.length) return float32; // all-silence fallback
+
+  const out = new Float32Array(parts.reduce((s, c) => s + c.length, 0));
+  let off = 0;
+  for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
 }
 
-function patchItem(i) {
-  const el = document.getElementById(`fi-${i}`);
-  if (el) el.outerHTML = itemHTML(files[i], i);
+function pcmEncode(float32) {
+  const int16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return int16;
 }
 
-function syncMeta() {
-  const selSize = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
-  const totSize = files.reduce((a, f) => a + f.size, 0);
-  document.getElementById('drive-meta').textContent =
-    `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} total · ${fmtDur(selSize)} selected`;
+function encodeWav(int16, sampleRate) {
+  const buf  = new ArrayBuffer(44 + int16.byteLength);
+  const v    = new DataView(buf);
+  const wstr = (off, s) => [...s].forEach((c, i) => v.setUint8(off + i, c.charCodeAt(0)));
+  wstr(0, 'RIFF');
+  v.setUint32(4,  36 + int16.byteLength, true);
+  wstr(8,  'WAVE'); wstr(12, 'fmt ');
+  v.setUint32(16, 16, true);           // chunk size
+  v.setUint16(20, 1,  true);           // PCM
+  v.setUint16(22, 1,  true);           // mono
+  v.setUint32(24, sampleRate,     true);
+  v.setUint32(28, sampleRate * 2, true); // byte rate
+  v.setUint16(32, 2,  true);           // block align
+  v.setUint16(34, 16, true);           // bits/sample
+  wstr(36, 'data');
+  v.setUint32(40, int16.byteLength, true);
+  new Int16Array(buf, 44).set(int16);
+  return buf;
 }
 
-function syncTranscribeBtn() {
-  document.getElementById('btn-transcribe').disabled =
-    busy || !cfg.api_base_url || !files.some(f => f.selected);
+// ══════════════════════════════════════════════════════════════════════════════
+// TRANSCRIPTION FLOW
+// ══════════════════════════════════════════════════════════════════════════════
+
+function requestBatch() {
+  if (busy) return;
+  if (cfg.delete_after_transcription) {
+    document.getElementById('delete-banner').style.display = 'flex';
+  } else {
+    startBatch();
+  }
 }
 
-function syncExportPanel() {
-  document.getElementById('export-panel').style.display =
-    files.some(f => f.status === 'done') ? 'block' : 'none';
-}
-
-// ── Transcription ─────────────────────────────────────────────────────────────
-
-async function runTranscription() {
+async function startBatch() {
   if (busy) return;
   busy = true;
-  syncTranscribeBtn();
+  syncActionBar();
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
     if (!f.selected || f.status === 'done') continue;
-    await transcribe(f, i);
+    await transcribeFile(f, i);
   }
 
   busy = false;
-  syncTranscribeBtn();
-  syncExportPanel();
-
-  if (cfg.delete_after_transcription) {
-    const done = files.filter(f => f.status === 'done');
-    if (done.length && confirm(`Delete ${done.length} transcribed file(s) from the drive?`)) {
-      for (const f of done) {
-        try { await f.handle.remove(); } catch (e) { console.warn('Delete failed:', f.name, e); }
-      }
-    }
-  }
+  syncActionBar();
+  renderHistory();
 }
 
-async function transcribe(f, i) {
-  f.status = 'uploading';
+async function transcribeFile(f, i) {
+  f.status = 'converting';
   f.error  = null;
   patchItem(i);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120_000);
-
   try {
-    const blob = await f.handle.getFile();
-    const form = new FormData();
-    form.append('file', blob, f.name);
-    form.append('model', cfg.model);
-    if (cfg.language) form.append('language', cfg.language);
-    form.append('response_format', cfg.response_format);
+    const raw = await f.handle.getFile();
+    const wav = await convertToParakeetFormat(await raw.arrayBuffer());
 
-    const headers = cfg.api_key ? { Authorization: `Bearer ${cfg.api_key}` } : {};
+    f.status = 'transcribing';
+    patchItem(i);
 
-    const res = await fetch(`${cfg.api_base_url}/audio/transcriptions`, {
-      method: 'POST', headers, body: form, signal: controller.signal,
-    });
+    const text = await runParakeet(wav);
+    if (!text?.trim()) throw new Error('Transcription returned an empty result');
 
-    clearTimeout(timer);
+    f.transcript = text.trim();
+    f.status     = 'done';
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 200) : ''}`);
+    // Persist — must succeed before deletion is allowed
+    if (cfg.auto_save) {
+      const entry = {
+        id:              genId(),
+        filename:        f.name,
+        transcribedAt:   new Date().toISOString(),
+        durationSeconds: Math.round(f.size / (17 * 1024 * 1024) * 60),
+        text:            f.transcript,
+        silenceRemoved:  cfg.vad_enabled,
+        deleted:         false,
+      };
+      saveTx(entry);
+      f.savedId = entry.id;
+      updateStorageDisplay();
     }
 
-    f.transcript = await parseBody(res);
-    f.status = 'done';
+    // Per-file deletion — only after localStorage confirmed
+    if (cfg.delete_after_transcription && f.savedId) {
+      try {
+        await f.handle.remove();
+        f.deleted = true;
+        if (f.savedId) updateTx(f.savedId, { deleted: true });
+      } catch (e) {
+        console.warn('Could not delete', f.name, e);
+      }
+    }
 
   } catch (e) {
-    clearTimeout(timer);
-    if (e.name === 'AbortError') {
-      f.error = 'Request timed out after 120 s.';
-    } else if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
-      f.error = `Network / CORS error — confirm the API is reachable and has Access-Control-Allow-Origin configured. (${e.message})`;
-    } else {
-      f.error = e.message;
-    }
+    f.error  = e.message;
     f.status = 'error';
   }
 
   patchItem(i);
 }
 
-async function parseBody(res) {
-  const fmt = cfg.response_format;
-  if (fmt === 'text' || fmt === 'srt' || fmt === 'vtt') return res.text();
-
-  // json / verbose_json — handle servers that ignore response_format and return plain text
-  const text = await res.text();
-  try {
-    const data = JSON.parse(text);
-    return data.text ?? JSON.stringify(data, null, 2);
-  } catch {
-    return text;
-  }
-}
-
-async function retryOne(i) {
+async function retryFile(i) {
   if (busy) return;
   busy = true;
-  syncTranscribeBtn();
-  await transcribe(files[i], i);
+  syncActionBar();
+  await transcribeFile(files[i], i);
   busy = false;
-  syncTranscribeBtn();
-  syncExportPanel();
+  syncActionBar();
+  renderHistory();
 }
 
-// ── Copy ──────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// RENDER — FILE LIST
+// ══════════════════════════════════════════════════════════════════════════════
 
-async function copyTx(i) {
-  const tx = files[i]?.transcript;
-  if (!tx) return;
-  try {
-    await navigator.clipboard.writeText(tx);
-  } catch {
-    prompt('Copy the transcription:', tx);
+const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : `${(b/1048576).toFixed(1)} MB`;
+const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
+const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const BADGE = {
+  pending:      ['badge-pending',      'Pending'],
+  converting:   ['badge-converting',   'Converting'],
+  transcribing: ['badge-transcribing', 'Transcribing'],
+  done:         ['badge-done',         'Done'],
+  error:        ['badge-error',        'Error'],
+};
+
+function renderFileList() {
+  const container = document.getElementById('file-list');
+  const meta      = document.getElementById('drive-meta');
+
+  if (!files.length) {
+    container.innerHTML = `<div class="empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>No WAV files found on this drive</div>`;
+    meta.textContent = dirHandle ? `${dirHandle.name} — 0 files` : 'No drive selected';
+    return;
   }
+
+  const selCount = files.filter(f => f.selected).length;
+  const selSize  = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
+  const totSize  = files.reduce((a, f) => a + f.size, 0);
+  meta.textContent = `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} · ${selCount} selected · ${fmtDur(selSize)}`;
+
+  container.innerHTML = files.map((f, i) => fileItemHTML(f, i)).join('');
+
+  container.querySelectorAll('.file-check').forEach(cb => {
+    cb.addEventListener('change', e => {
+      files[+e.target.dataset.i].selected = e.target.checked;
+      syncActionBar();
+      syncMeta();
+    });
+  });
 }
 
-// ── Export ────────────────────────────────────────────────────────────────────
+function fileItemHTML(f, i) {
+  const [bc, bl] = BADGE[f.status] || BADGE.pending;
+  const inProgress = f.status === 'converting' || f.status === 'transcribing';
+  const connectors = [
+    cfg.notion_api_key && cfg.notion_target_id ? `<button class="btn btn-ghost btn-sm" onclick="sendToNotion(${i})">Notion</button>` : '',
+    cfg.obsidian_vault_name ? `<button class="btn btn-ghost btn-sm" onclick="sendToObsidian(${i})">Obsidian</button>` : '',
+  ].join('');
+
+  return `
+    <div class="file-item${f.deleted ? ' fi-deleted' : ''}" id="fi-${i}">
+      <div class="file-row">
+        <input type="checkbox" class="file-check" data-i="${i}" ${f.selected?'checked':''} ${busy?'disabled':''}>
+        <div class="file-info">
+          <div class="file-name" title="${esc(f.path)}">${esc(f.path)}</div>
+          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)} · ${fmtDate(f.mtime)}</div>
+          <div class="file-badges">
+            <span class="badge ${bc}">${bl}</span>
+            ${f.deleted ? `<span class="badge badge-deleted">Deleted from drive</span>` : ''}
+          </div>
+        </div>
+      </div>
+      ${inProgress ? `<div class="progress-bar"><div class="progress-fill"></div></div>` : ''}
+      ${f.transcript !== null ? `
+        <div class="transcript">${esc(f.transcript)}</div>
+        <div class="tx-actions">
+          <button class="btn btn-ghost btn-sm" onclick="copyText(${i})">Copy</button>
+          ${navigator.share ? `<button class="btn btn-ghost btn-sm" onclick="shareOne(${i})">Share</button>` : ''}
+          ${connectors}
+        </div>` : ''}
+      ${f.error ? `
+        <div class="error-msg">
+          <span>${esc(f.error)}</span>
+          <button class="btn btn-ghost btn-sm" onclick="retryFile(${i})">Retry</button>
+        </div>` : ''}
+    </div>`;
+}
+
+function patchItem(i) {
+  const el = document.getElementById(`fi-${i}`);
+  if (el) el.outerHTML = fileItemHTML(files[i], i);
+}
+
+function syncMeta() {
+  const selCount = files.filter(f => f.selected).length;
+  const selSize  = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
+  const totSize  = files.reduce((a, f) => a + f.size, 0);
+  document.getElementById('drive-meta').textContent =
+    `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} · ${selCount} selected · ${fmtDur(selSize)}`;
+}
+
+function toggleSelectAll() {
+  const allSelected = files.every(f => f.selected);
+  files.forEach(f => f.selected = !allSelected);
+  renderFileList();
+  syncActionBar();
+}
+
+function syncActionBar() {
+  const bar     = document.getElementById('action-bar');
+  const hasDone = files.some(f => f.transcript !== null);
+  bar.className = files.length ? 'action-bar visible' : 'action-bar';
+  document.getElementById('btn-transcribe').disabled = busy || !files.some(f => f.selected);
+  document.getElementById('btn-export-txt').disabled = !hasDone;
+  document.getElementById('btn-export-md').disabled  = !hasDone;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RENDER — HISTORY
+// ══════════════════════════════════════════════════════════════════════════════
+
+function renderHistory() {
+  const panel     = document.getElementById('history-panel');
+  const container = document.getElementById('history-list');
+  const entries   = allTx();
+
+  if (!entries.length) { panel.style.display = 'none'; return; }
+
+  panel.style.display = 'block';
+  container.innerHTML = entries.map(historyItemHTML).join('');
+}
+
+function historyItemHTML(e) {
+  const preview = esc(e.text.slice(0, 100)) + (e.text.length > 100 ? '…' : '');
+  return `
+    <div class="history-item" id="hx-${e.id}">
+      <div class="history-head">
+        <span class="history-filename">${esc(e.filename)}${e.deleted ? ' <span style="opacity:.5">(deleted from drive)</span>' : ''}</span>
+        <span class="history-date">${fmtDate(new Date(e.transcribedAt).getTime())}</span>
+      </div>
+      <div class="history-preview">${preview}</div>
+      <div class="history-full">${esc(e.text)}</div>
+      <div class="history-actions">
+        <button class="btn btn-ghost btn-sm" onclick="toggleHx('${e.id}')">Expand</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyHx('${e.id}')">Copy</button>
+        ${navigator.share ? `<button class="btn btn-ghost btn-sm" onclick="shareHx('${e.id}')">Share</button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="deleteHx('${e.id}')">Delete</button>
+      </div>
+    </div>`;
+}
+
+function toggleHx(id) {
+  const el = document.getElementById(`hx-${id}`);
+  if (!el) return;
+  const expanded = el.classList.toggle('expanded');
+  el.querySelector('.history-actions .btn-ghost').textContent = expanded ? 'Collapse' : 'Expand';
+}
+
+function copyHx(id) {
+  const e = getTx(id);
+  if (e) copyToClipboard(e.text);
+}
+
+async function shareHx(id) {
+  const e = getTx(id);
+  if (!e) return;
+  try { await navigator.share({ title: e.filename, text: e.text }); }
+  catch { copyToClipboard(e.text); }
+}
+
+function deleteHx(id) {
+  if (!confirm('Remove this transcription from history? Source audio is not affected.')) return;
+  removeTx(id);
+  renderHistory();
+  updateStorageDisplay();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COPY / SHARE / EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function copyToClipboard(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { prompt('Copy the text below:', text); }
+}
+
+function copyText(i) { copyToClipboard(files[i]?.transcript || ''); }
+
+async function shareOne(i) {
+  const f = files[i];
+  if (!f?.transcript) return;
+  try { await navigator.share({ title: f.name, text: f.transcript }); }
+  catch { copyToClipboard(f.transcript); }
+}
+
+async function shareAll() {
+  const done = files.filter(f => f.transcript !== null);
+  if (!done.length) return;
+  const text = done.map(f => `${f.path}\n\n${f.transcript}`).join('\n\n---\n\n');
+  try { await navigator.share({ title: 'Transcriptions', text }); }
+  catch { copyToClipboard(text); }
+}
 
 function exportAll(fmt) {
-  const done = files.filter(f => f.status === 'done' && f.transcript !== null);
+  const done = files.filter(f => f.transcript !== null);
   if (!done.length) return;
+  const sep     = '\n\n---\n\n';
   const content = fmt === 'txt'
-    ? done.map(f => `=== ${f.path} ===\n\n${f.transcript}`).join('\n\n\n')
-    : done.map(f => `## ${f.path}\n\n${f.transcript}`).join('\n\n---\n\n');
+    ? done.map(f => `${f.path}\n\n${f.transcript}`).join(sep)
+    : done.map(f => `## ${f.path}\n\n${f.transcript}`).join(sep);
   const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([content], { type: 'text/plain' })),
+    href:     URL.createObjectURL(new Blob([content], { type: 'text/plain' })),
     download: `transcriptions.${fmt}`,
   });
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CONNECTORS
+// ══════════════════════════════════════════════════════════════════════════════
+
+async function sendToNotion(i) {
+  const f = files[i];
+  if (!f?.transcript) return;
+  try {
+    const res = await fetch(`https://api.notion.com/v1/blocks/${cfg.notion_target_id}/children`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization':   `Bearer ${cfg.notion_api_key}`,
+        'Notion-Version':  '2022-06-28',
+        'Content-Type':    'application/json',
+      },
+      body: JSON.stringify({
+        children: [
+          { type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: f.name } }] } },
+          { type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: f.transcript } }] } },
+        ],
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `HTTP ${res.status}`);
+    }
+    alert('Sent to Notion.');
+  } catch (e) {
+    alert(`Notion export failed: ${e.message}\n\nNote: Notion's API may block browser-direct requests due to CORS restrictions.`);
+  }
+}
+
+function sendToObsidian(i) {
+  const f = files[i];
+  if (!f?.transcript || !cfg.obsidian_vault_name) return;
+  const name = f.name.replace(/\.wav$/i, '');
+  window.open(
+    `obsidian://new?vault=${encodeURIComponent(cfg.obsidian_vault_name)}&name=${encodeURIComponent(name)}&content=${encodeURIComponent(f.transcript)}`
+  );
 }
 </script>
 </body>
