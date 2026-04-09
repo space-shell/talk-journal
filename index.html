@@ -430,13 +430,14 @@
       <div class="panel-head">
         <div>
           <div class="panel-title">Parakeet Model Required</div>
-          <div class="panel-meta">One-time ~640 MB download · Cached in browser · No audio ever leaves your device</div>
+          <div class="panel-meta">One-time download · Cached in browser · No audio ever leaves your device</div>
         </div>
       </div>
       <div style="padding:1rem;display:flex;flex-direction:column;gap:.875rem">
         <p style="font-size:.875rem;color:var(--muted);line-height:1.65">
           Transcription runs entirely in your browser using the Parakeet TDT 0.6B model via WebGPU and WASM.
-          The model (~640 MB) is downloaded once and cached locally in your browser.
+          The model is downloaded once and cached locally (~650 MB in WASM mode, ~2.5 GB in WebGPU mode).
+          No audio ever leaves your device.
         </p>
         <div id="download-progress" class="download-progress" style="display:none">
           <div class="download-bar"><div class="download-fill" id="download-fill" style="width:0%"></div></div>
@@ -505,52 +506,38 @@
 
 </div>
 
-<script>
+<script type="module">
+import { fromHub } from 'https://esm.sh/parakeet.js@1.4.4';
+
 // ══════════════════════════════════════════════════════════════════════════════
-// PARAKEET.JS INTEGRATION
+// PARAKEET.JS — model: parakeet-tdt-0.6b-v3 (multilingual)
+// Library:  https://github.com/ysdede/parakeet.js  (parakeet.js@1.4.4)
+// Backend:  WebGPU (encoder) + WASM (decoder) when WebGPU is available,
+//           otherwise full WASM with int8 quantisation (~650 MB).
+// Caching:  handled internally by the library via IndexedDB (parakeet-cache-db).
 // ══════════════════════════════════════════════════════════════════════════════
-//
-// parakeet.js is a community port of NVIDIA Parakeet TDT 0.6B for in-browser
-// inference via WebGPU (encoder) + WASM (decoder).
-//
-// Library: parakeet.js by ysdede — https://huggingface.co/spaces/ysdede/parakeet.js-demo
-// Discussion: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2/discussions/56
-//
-// To complete this integration:
-//   1. Confirm the library's CDN/script URL and pin to a specific version
-//   2. Confirm the JS API: what function is called, what it accepts (ArrayBuffer? Float32Array?),
-//      and what it returns (string? Promise<string>?)
-//   3. Pin MODEL_BASE_URL to a specific Hugging Face commit hash — never use `main`
-//   4. Update initParakeet() to load the script and initialise the model from cache
-//   5. Update runParakeet() to call the actual transcription function
-//
-// Until then, transcription will throw a descriptive error.
-// ──────────────────────────────────────────────────────────────────────────────
 
-const MODEL_CACHE    = 'parakeet-models-v1';
-const MODEL_BASE_URL = 'REPLACE_WITH_PINNED_HF_REVISION_URL';
-const MODEL_FILES    = ['encoder.int8.onnx', 'decoder.int8.onnx', 'joiner.int8.onnx'];
-const MODEL_TOTAL_BYTES = 640 * 1024 * 1024;
+const MODEL_KEY = 'parakeet-tdt-0.6b-v3';
+let parakeetModel = null;
 
-let parakeetReady = false;
-
-async function initParakeet() {
-  // TODO: load parakeet.js script, initialise model from Cache API files
-  // Example (API TBC):
-  //   await loadScript('https://cdn.example.com/parakeet.js@1.0.0/parakeet.min.js');
-  //   await Parakeet.init({ cacheKey: MODEL_CACHE, files: MODEL_FILES });
-  //   parakeetReady = true;
-  console.warn('parakeet.js not yet integrated — see integration note at top of script');
+async function loadParakeet(onProgress) {
+  parakeetModel = await fromHub(MODEL_KEY, {
+    backend:             hasWebGPU ? 'webgpu' : 'wasm',
+    encoderQuant:        'fp32',   // int8 is silently forced to fp32 for WebGPU anyway
+    decoderQuant:        'int8',
+    preprocessorBackend: 'js',
+    ...(onProgress ? { progress: onProgress } : {}),
+  });
+  localStorage.setItem('parakeet_model_ready', 'true');
 }
 
-async function runParakeet(wavArrayBuffer) {
-  if (!parakeetReady) {
-    throw new Error(
-      'parakeet.js integration is not yet complete. ' +
-      'See the PARAKEET.JS INTEGRATION comment at the top of the script in index.html.'
-    );
-  }
-  // TODO: return await Parakeet.transcribe(wavArrayBuffer);
+async function runParakeet(float32) {
+  if (!parakeetModel) throw new Error('Model not loaded — download the model first.');
+  // transcribeLongAudio handles long DJI Mic 2 recordings (up to 30 min) via internal chunking
+  const result = await parakeetModel.transcribeLongAudio(float32, 16000, {
+    returnTimestamps: false,
+  });
+  return result.text;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -609,7 +596,7 @@ function boot() {
   syncSettingsForm();
   updateStorageDisplay();
   checkWebGPUNotice();
-  checkModelCache();
+  checkModelStatus();
   renderHistory();
 
   document.getElementById('open-settings').onclick  = openSettings;
@@ -774,38 +761,32 @@ function checkWebGPUNotice() {
   if (!hasWebGPU) document.getElementById('webgpu-notice').style.display = 'flex';
 }
 
-async function checkModelCache() {
+async function checkModelStatus() {
   const dot   = document.getElementById('model-dot');
   const label = document.getElementById('model-label');
   const panel = document.getElementById('model-panel');
 
-  if (MODEL_BASE_URL === 'REPLACE_WITH_PINNED_HF_REVISION_URL') {
-    dot.className   = 'model-dot missing';
-    label.textContent = 'Integration pending';
-    panel.style.display = 'block';
-    return;
-  }
-
-  try {
-    const cache  = await caches.open(MODEL_CACHE);
-    const checks = await Promise.all(MODEL_FILES.map(f => cache.match(`${MODEL_BASE_URL}/${f}`)));
-    if (checks.every(Boolean)) {
-      dot.className     = 'model-dot loading';
-      label.textContent = 'Loading model…';
-      panel.style.display = 'none';
-      await initParakeet();
+  if (localStorage.getItem('parakeet_model_ready') === 'true') {
+    // Model was previously downloaded — load from IndexedDB cache (fast)
+    dot.className     = 'model-dot loading';
+    label.textContent = 'Loading model…';
+    panel.style.display = 'none';
+    try {
+      await loadParakeet();
       dot.className     = 'model-dot cached';
       label.textContent = 'Model ready';
-    } else {
+      syncActionBar();
+    } catch (e) {
+      // IndexedDB cache may have been cleared
+      localStorage.removeItem('parakeet_model_ready');
       dot.className     = 'model-dot missing';
       label.textContent = 'Model not downloaded';
       panel.style.display = 'block';
     }
-  } catch (e) {
+  } else {
     dot.className     = 'model-dot missing';
-    label.textContent = 'Model unavailable';
+    label.textContent = 'Model not downloaded';
     panel.style.display = 'block';
-    console.error('Cache check failed:', e);
   }
 }
 
@@ -817,43 +798,26 @@ async function downloadModel() {
   const dot   = document.getElementById('model-dot');
   const label = document.getElementById('model-label');
 
-  btn.disabled = true;
+  btn.disabled       = true;
   prog.style.display = 'block';
   dot.className      = 'model-dot loading';
   label.textContent  = 'Downloading…';
+  dlLbl.textContent  = 'Starting download…';
 
   try {
-    const cache = await caches.open(MODEL_CACHE);
-    let totalReceived = 0;
-
-    for (let i = 0; i < MODEL_FILES.length; i++) {
-      const filename = MODEL_FILES[i];
-      const url = `${MODEL_BASE_URL}/${filename}`;
-      dlLbl.textContent = `Downloading ${filename} (${i + 1}/${MODEL_FILES.length})…`;
-
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed to download ${filename}: HTTP ${res.status}`);
-
-      const reader = res.body.getReader();
-      const chunks = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        totalReceived += value.length;
-        fill.style.width = `${Math.min(99, (totalReceived / MODEL_TOTAL_BYTES) * 100)}%`;
-      }
-
-      const merged = new Uint8Array(chunks.reduce((s, c) => s + c.length, 0));
-      let offset = 0;
-      for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.length; }
-      await cache.put(url, new Response(merged, { headers: { 'content-type': 'application/octet-stream' } }));
-    }
+    await loadParakeet((p) => {
+      if (!p) return;
+      // parakeet.js progress callback shape: { status, file, progress, loaded, total }
+      const pct = typeof p === 'number'      ? p
+        : p.progress != null                 ? p.progress
+        : (p.loaded && p.total)              ? (p.loaded / p.total * 100)
+        : null;
+      if (pct != null) fill.style.width = `${Math.min(99, pct)}%`;
+      if (p.file)              dlLbl.textContent = `Downloading ${p.file}…`;
+      else if (p.status === 'loading') dlLbl.textContent = 'Loading model into memory…';
+    });
 
     fill.style.width  = '100%';
-    dlLbl.textContent = 'Loading model…';
-    await initParakeet();
-
     dot.className     = 'model-dot cached';
     label.textContent = 'Model ready';
     document.getElementById('model-panel').style.display = 'none';
@@ -863,6 +827,7 @@ async function downloadModel() {
     dot.className      = 'model-dot missing';
     label.textContent  = 'Download failed';
     btn.disabled       = false;
+    console.error('Model load failed:', e);
   }
 }
 
@@ -900,39 +865,16 @@ async function scan(handle, prefix) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AUDIO PIPELINE
+// Returns Float32Array (mono 16kHz) ready for parakeet.js directly.
 // ══════════════════════════════════════════════════════════════════════════════
 
-function isAlready16kMono16bit(buf) {
-  if (buf.byteLength < 36) return false;
-  const v   = new DataView(buf);
-  const str = (off, n) => Array.from({ length: n }, (_, i) => String.fromCharCode(v.getUint8(off + i))).join('');
-  if (str(0, 4) !== 'RIFF' || str(8, 4) !== 'WAVE') return false;
-  return (
-    v.getUint16(20, true) === 1  &&  // PCM
-    v.getUint16(22, true) === 1  &&  // mono
-    v.getUint32(24, true) === 16000 &&
-    v.getUint16(34, true) === 16
-  );
-}
-
-async function convertToParakeetFormat(arrayBuffer) {
-  if (isAlready16kMono16bit(arrayBuffer)) {
-    // Still apply VAD if enabled; skip format conversion
-    if (!cfg.vad_enabled) return arrayBuffer;
-    const ctx = new AudioContext({ sampleRate: 16000 });
-    const buf = await ctx.decodeAudioData(arrayBuffer.slice(0));
-    await ctx.close();
-    const float32 = removeSilence(buf.getChannelData(0), 16000);
-    const int16   = pcmEncode(float32);
-    return encodeWav(int16, 16000);
-  }
-
-  // Decode (handles 24-bit PCM, 32-bit float, any sample rate)
-  const audioCtx   = new AudioContext();
+async function prepareAudio(arrayBuffer) {
+  // Decode — handles 24-bit PCM, 32-bit float, any sample rate
+  const audioCtx    = new AudioContext();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
   await audioCtx.close();
 
-  // Resample to 16kHz mono
+  // Resample to 16kHz mono via OfflineAudioContext
   const targetRate = 16000;
   const numFrames  = Math.ceil(audioBuffer.duration * targetRate);
   const offCtx     = new OfflineAudioContext(1, numFrames, targetRate);
@@ -944,8 +886,7 @@ async function convertToParakeetFormat(arrayBuffer) {
 
   let float32 = rendered.getChannelData(0);
   if (cfg.vad_enabled) float32 = removeSilence(float32, targetRate);
-
-  return encodeWav(pcmEncode(float32), targetRate);
+  return float32;
 }
 
 function removeSilence(float32, sampleRate) {
@@ -999,35 +940,6 @@ function removeSilence(float32, sampleRate) {
   return out;
 }
 
-function pcmEncode(float32) {
-  const int16 = new Int16Array(float32.length);
-  for (let i = 0; i < float32.length; i++) {
-    const s = Math.max(-1, Math.min(1, float32[i]));
-    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-  }
-  return int16;
-}
-
-function encodeWav(int16, sampleRate) {
-  const buf  = new ArrayBuffer(44 + int16.byteLength);
-  const v    = new DataView(buf);
-  const wstr = (off, s) => [...s].forEach((c, i) => v.setUint8(off + i, c.charCodeAt(0)));
-  wstr(0, 'RIFF');
-  v.setUint32(4,  36 + int16.byteLength, true);
-  wstr(8,  'WAVE'); wstr(12, 'fmt ');
-  v.setUint32(16, 16, true);           // chunk size
-  v.setUint16(20, 1,  true);           // PCM
-  v.setUint16(22, 1,  true);           // mono
-  v.setUint32(24, sampleRate,     true);
-  v.setUint32(28, sampleRate * 2, true); // byte rate
-  v.setUint16(32, 2,  true);           // block align
-  v.setUint16(34, 16, true);           // bits/sample
-  wstr(36, 'data');
-  v.setUint32(40, int16.byteLength, true);
-  new Int16Array(buf, 44).set(int16);
-  return buf;
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // TRANSCRIPTION FLOW
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1063,13 +975,13 @@ async function transcribeFile(f, i) {
   patchItem(i);
 
   try {
-    const raw = await f.handle.getFile();
-    const wav = await convertToParakeetFormat(await raw.arrayBuffer());
+    const raw     = await f.handle.getFile();
+    const float32 = await prepareAudio(await raw.arrayBuffer());
 
     f.status = 'transcribing';
     patchItem(i);
 
-    const text = await runParakeet(wav);
+    const text = await runParakeet(float32);
     if (!text?.trim()) throw new Error('Transcription returned an empty result');
 
     f.transcript = text.trim();
@@ -1370,6 +1282,13 @@ function sendToObsidian(i) {
     `obsidian://new?vault=${encodeURIComponent(cfg.obsidian_vault_name)}&name=${encodeURIComponent(name)}&content=${encodeURIComponent(f.transcript)}`
   );
 }
+
+// ── Expose functions used by inline onclick handlers in dynamically-built HTML ──
+// (required because this is a module script — functions are not global by default)
+Object.assign(window, {
+  retryFile, copyText, shareOne, sendToNotion, sendToObsidian,
+  toggleHx, copyHx, shareHx, deleteHx,
+});
 </script>
 </body>
 </html>
