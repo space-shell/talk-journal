@@ -212,14 +212,14 @@
       padding: 0.875rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
     }
     .file-item:last-child { border-bottom: none; }
-    .file-item.fi-deleted .file-name { text-decoration: line-through; opacity: .55; }
 
     .file-row { display: flex; align-items: flex-start; gap: 0.6rem; }
-    .file-check { flex-shrink: 0; accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; margin-top: 2px; }
+    .file-check { flex-shrink: 0; accent-color: var(--accent); width: 18px; height: 18px; cursor: pointer; margin-top: 4px; }
     .file-info  { flex: 1; min-width: 0; }
-    .file-name  { font-family: var(--mono); font-size: 0.82rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-meta  { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
-    .file-badges { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.25rem; }
+    .file-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+    .card-title { font-size: 0.9rem; font-weight: 600; }
+    .file-name  { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 0.1rem; }
+    .file-meta  { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
 
     .badge {
       font-size: 0.68rem; font-weight: 700; padding: 0.18rem 0.5rem;
@@ -243,12 +243,21 @@
       100% { transform: translateX(200%) scaleX(.4); }
     }
 
+    .tx-container { display: flex; gap: 0.75rem; align-items: flex-start; }
     .transcript {
+      flex: 1; min-width: 0;
       background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
       padding: 0.875rem 1rem; font-size: 0.875rem; line-height: 1.7;
-      max-width: 65ch; white-space: pre-wrap; word-break: break-word;
+      white-space: pre-wrap; word-break: break-word;
     }
-    .tx-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .tx-actions { display: flex; flex-direction: column; gap: 0.35rem; flex-shrink: 0; }
+
+    .notes-area {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.75rem; font-size: 0.875rem; font-family: inherit;
+      color: var(--text); resize: vertical; line-height: 1.5;
+    }
+    .notes-area:focus { outline: none; border-color: var(--accent); }
 
     .error-msg {
       font-size: 0.8rem; color: var(--red);
@@ -266,21 +275,6 @@
     .download-bar  { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
     .download-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
     .download-label { font-size: 0.8rem; color: var(--muted); }
-
-    /* ── History ──────────────────────────────────────────────────────────── */
-    .history-item {
-      border-bottom: 1px solid var(--border);
-      padding: 0.875rem 1rem; display: flex; flex-direction: column; gap: 0.4rem;
-    }
-    .history-item:last-child { border-bottom: none; }
-    .history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
-    .history-filename { font-family: var(--mono); font-size: 0.82rem; font-weight: 500; }
-    .history-date     { font-size: 0.72rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
-    .history-preview  { font-size: 0.82rem; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-    .history-full     { font-size: 0.875rem; line-height: 1.7; white-space: pre-wrap; display: none; }
-    .history-item.expanded .history-preview { display: none; }
-    .history-item.expanded .history-full { display: block; }
-    .history-actions  { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.2rem; }
 
     /* ── Sticky action bar ────────────────────────────────────────────────── */
     .action-bar {
@@ -329,10 +323,11 @@ const hasSimd = typeof WebAssembly !== 'undefined' && WebAssembly.validate(new U
 const TX_PREFIX = 'transcription:';
 const TX_INDEX  = 'transcription:index';
 
-const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
-const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
-const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-const genId    = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); });
+const fmtBytes     = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
+const fmtDur       = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
+const fmtDate      = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+const fmtCardTitle = ts => { const d = new Date(ts); return `${d.toLocaleDateString(undefined, { weekday: 'long' })} · ${d.toLocaleTimeString(undefined, { timeStyle: 'short' })}`; };
+const genId        = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); });
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SETTINGS
@@ -579,10 +574,11 @@ async function scan(handle, prefix, found) {
       found.push({
         handle: entry, name, path, size: file.size, mtime: file.lastModified,
         selected:   !existing,
-        status:     existing ? 'done'         : 'pending',
-        transcript: existing ? existing.text  : null,
-        savedId:    existing ? existing.id    : null,
+        status:     existing ? 'done'               : 'pending',
+        transcript: existing ? existing.text        : null,
+        savedId:    existing ? existing.id          : null,
         deleted:    existing ? (existing.deleted ?? false) : false,
+        notes:      existing ? (existing.notes || '') : '',
         error: null,
       });
     } else if (entry.kind === 'directory') {
@@ -641,6 +637,7 @@ async function transcribeFile(i) {
         text:            transcript,
         silenceRemoved:  cfg.value.vad_enabled,
         deleted:         false,
+        notes:           '',
       };
       saveTx(entry);
       savedId = entry.id;
@@ -752,33 +749,64 @@ const BADGE_MAP = {
 };
 
 function FileItem({ f, i }) {
+  const [notesOpen,  setNotesOpen]  = useState(false);
+  const [notesDraft, setNotesDraft] = useState(f.notes || '');
+
   const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
   const inProgress = f.status === 'converting' || f.status === 'transcribing';
   const isBusy     = busy.value;
   const c          = cfg.value;
+
+  const saveNotes = text => {
+    updateFile(i, { notes: text });
+    if (f.savedId) updateTx(f.savedId, { notes: text });
+  };
+
+  const onDelete = () => {
+    if (!confirm('Remove this transcription? The source file is not affected.')) return;
+    if (f.savedId) removeTx(f.savedId);
+    if (f.deleted) {
+      files.value = files.value.filter((_, idx) => idx !== i);
+    } else {
+      updateFile(i, { transcript: null, status: 'pending', savedId: null, notes: '' });
+      setNotesDraft(''); setNotesOpen(false);
+    }
+    refreshHistory(); refreshStorage();
+  };
+
   return html`
-    <div class=${'file-item' + (f.deleted ? ' fi-deleted' : '')}>
+    <div class="file-item">
       <div class="file-row">
         <input type="checkbox" class="file-check" checked=${f.selected} disabled=${isBusy}
           onChange=${e => updateFile(i, { selected: e.target.checked })} />
         <div class="file-info">
-          <div class="file-name" title=${f.path}>${f.path}</div>
-          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)} · ${fmtDate(f.mtime)}</div>
-          <div class="file-badges">
+          <div class="file-header">
+            <div class="card-title">${fmtCardTitle(f.mtime)}</div>
             <span class=${'badge ' + bc}>${bl}</span>
-            ${f.deleted && html`<span class="badge badge-deleted">Deleted from drive</span>`}
           </div>
+          <div class="file-name" title=${f.path}>${f.path}</div>
+          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)}</div>
         </div>
       </div>
       ${inProgress && html`<div class="progress-bar"><div class="progress-fill"></div></div>`}
       ${f.transcript !== null && html`
-        <div class="transcript">${f.transcript}</div>
-        <div class="tx-actions">
-          <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(f.transcript)}>Copy</button>
-          ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${() => shareOne(i)}>Share</button>`}
-          ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
-          ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
+        <div class="tx-container">
+          <div class="transcript">${f.transcript}</div>
+          <div class="tx-actions">
+            <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(f.transcript)}>Copy</button>
+            ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${() => shareOne(i)}>Share</button>`}
+            ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
+            ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
+            <button class="btn btn-ghost btn-sm" onClick=${() => setNotesOpen(!notesOpen)}>Notes</button>
+            <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
+          </div>
         </div>
+      `}
+      ${notesOpen && html`
+        <textarea class="notes-area" placeholder="Add notes…" rows="3"
+          value=${notesDraft}
+          onInput=${e => { setNotesDraft(e.target.value); saveNotes(e.target.value); }}
+        ></textarea>
       `}
       ${f.error && html`
         <div class="error-msg">
@@ -827,42 +855,6 @@ function FilesPanel() {
     </div>`;
 }
 
-function HistoryItem({ e }) {
-  const [expanded, setExpanded] = useState(false);
-  const preview = e.text.slice(0, 100) + (e.text.length > 100 ? '…' : '');
-  const onDelete = () => {
-    if (!confirm('Remove this transcription from history? Source audio is not affected.')) return;
-    removeTx(e.id); refreshHistory(); refreshStorage();
-  };
-  return html`
-    <div class=${'history-item' + (expanded ? ' expanded' : '')}>
-      <div class="history-head">
-        <span class="history-filename">
-          ${e.filename}
-          ${e.deleted && html` <span style="opacity:.5">(deleted from drive)</span>`}
-        </span>
-        <span class="history-date">${fmtDate(new Date(e.transcribedAt).getTime())}</span>
-      </div>
-      <div class="history-preview">${preview}</div>
-      <div class="history-full">${e.text}</div>
-      <div class="history-actions">
-        <button class="btn btn-ghost btn-sm" onClick=${() => setExpanded(!expanded)}>${expanded ? 'Collapse' : 'Expand'}</button>
-        <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(e.text)}>Copy</button>
-        ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${async () => { try { await navigator.share({ title: e.filename, text: e.text }); } catch { copyToClipboard(e.text); } }}>Share</button>`}
-        <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
-      </div>
-    </div>`;
-}
-
-function HistoryPanel() {
-  const entries = historyEntries.value;
-  if (!entries.length) return null;
-  return html`
-    <div class="panel">
-      <div class="panel-head"><div class="panel-title">History</div></div>
-      <div>${entries.map(e => html`<${HistoryItem} key=${e.id} e=${e} />`)}</div>
-    </div>`;
-}
 
 function ModelPanel() {
   if (!modelPanelVis.value) return null;
@@ -1091,7 +1083,6 @@ function App() {
           </div>
         `}
         <${FilesPanel} />
-        <${HistoryPanel} />
       </main>
       <${ActionBar} />
     </div>`;
