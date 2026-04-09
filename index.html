@@ -439,6 +439,10 @@
           The model is downloaded once and cached locally (~650 MB in WASM mode, ~2.5 GB in WebGPU mode).
           No audio ever leaves your device.
         </p>
+        <p id="simd-error" style="display:none;font-size:.875rem;color:var(--danger);line-height:1.65;margin:0">
+          Your browser does not support WebAssembly SIMD, which is required for in-browser transcription.
+          Please use Chrome 91+ on a desktop computer or a modern Android device (Chrome 91+).
+        </p>
         <div id="download-progress" class="download-progress" style="display:none">
           <div class="download-bar"><div class="download-fill" id="download-fill" style="width:0%"></div></div>
           <div class="download-label" id="download-label">Preparing…</div>
@@ -451,7 +455,7 @@
 
     <!-- WebGPU unavailable notice -->
     <div class="notice warn inline-notice" id="webgpu-notice" style="display:none;border-radius:var(--r)">
-      <span>WebGPU is not available. In-browser transcription requires a WebGPU-capable GPU. Check <code>chrome://gpu</code> for status.</span>
+      <span>WebGPU not available — using WASM mode (~650 MB). Transcription will work but may be slower than with a GPU.</span>
     </div>
 
     <!-- Files panel -->
@@ -578,6 +582,10 @@ let busy      = false;
 
 const hasFilePicker = 'showDirectoryPicker' in window;
 const hasWebGPU     = 'gpu' in navigator;
+// WebAssembly SIMD is required by the WASM backend of parakeet.js
+const hasSimd = typeof WebAssembly !== 'undefined' && WebAssembly.validate(new Uint8Array([
+  0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11
+]));
 
 if (!hasFilePicker) {
   const el = document.getElementById('compat-warning');
@@ -765,6 +773,16 @@ async function checkModelStatus() {
   const dot   = document.getElementById('model-dot');
   const label = document.getElementById('model-label');
   const panel = document.getElementById('model-panel');
+
+  if (!hasSimd) {
+    dot.className     = 'model-dot missing';
+    label.textContent = 'Not supported';
+    panel.style.display = 'block';
+    document.getElementById('simd-error').style.display = 'block';
+    document.getElementById('btn-download').disabled = true;
+    document.getElementById('btn-download').style.display = 'none';
+    return;
+  }
 
   if (localStorage.getItem('parakeet_model_ready') === 'true') {
     // Model was previously downloaded — load from IndexedDB cache (fast)
