@@ -577,6 +577,26 @@ let files     = []; // { handle, name, path, size, mtime, selected, status, dele
 let busy      = false;
 
 // ══════════════════════════════════════════════════════════════════════════════
+// PURE CONSTANTS — must be defined before boot() runs to avoid TDZ errors
+// ══════════════════════════════════════════════════════════════════════════════
+
+const TX_PREFIX = 'transcription:';
+const TX_INDEX  = 'transcription:index';
+
+const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
+const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
+const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const BADGE = {
+  pending:      ['badge-pending',      'Pending'],
+  converting:   ['badge-converting',   'Converting'],
+  transcribing: ['badge-transcribing', 'Transcribing'],
+  done:         ['badge-done',         'Done'],
+  error:        ['badge-error',        'Error'],
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
 // BOOT + COMPAT CHECK
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -691,8 +711,7 @@ function onSaveSettings() {
 // STORAGE + HISTORY (localStorage)
 // ══════════════════════════════════════════════════════════════════════════════
 
-const TX_PREFIX = 'transcription:';
-const TX_INDEX  = 'transcription:index';
+// TX_PREFIX and TX_INDEX moved — see below BOOT section
 
 function getIndex() {
   try { return JSON.parse(localStorage.getItem(TX_INDEX) || '[]'); }
@@ -724,6 +743,11 @@ function removeTx(id) {
 
 function allTx() {
   return getIndex().map(id => getTx(id)).filter(Boolean);
+}
+
+// Returns the most recent history entry for a given filename, or null.
+function getTxByFilename(name) {
+  return getIndex().map(id => getTx(id)).filter(Boolean).find(e => e.filename === name) || null;
 }
 
 function genId() {
@@ -871,10 +895,21 @@ async function scan(handle, prefix) {
   for await (const [name, entry] of handle.entries()) {
     const path = prefix ? `${prefix}/${name}` : name;
     if (entry.kind === 'file' && name.toLowerCase().endsWith('.wav')) {
-      const file = await entry.getFile();
-      files.push({ handle: entry, name, path, size: file.size, mtime: file.lastModified,
-                   selected: true, status: 'pending', deleted: false,
-                   transcript: null, error: null, savedId: null });
+      const file    = await entry.getFile();
+      const existing = getTxByFilename(name);
+      files.push({
+        handle:     entry,
+        name, path,
+        size:       file.size,
+        mtime:      file.lastModified,
+        // Pre-populate from history if already transcribed; uncheck so it's skipped by default
+        selected:   !existing,
+        status:     existing ? 'done'       : 'pending',
+        transcript: existing ? existing.text : null,
+        savedId:    existing ? existing.id   : null,
+        deleted:    existing ? (existing.deleted ?? false) : false,
+        error:      null,
+      });
     } else if (entry.kind === 'directory') {
       await scan(entry, path);
     }
@@ -993,13 +1028,15 @@ async function transcribeFile(f, i) {
   patchItem(i);
 
   try {
-    const raw     = await f.handle.getFile();
-    const float32 = await prepareAudio(await raw.arrayBuffer());
+    const raw      = await f.handle.getFile();
+    let   float32  = await prepareAudio(await raw.arrayBuffer());
 
     f.status = 'transcribing';
     patchItem(i);
 
     const text = await runParakeet(float32);
+    float32 = null; // release audio buffer (~100 MB+) as soon as inference is done
+
     if (!text?.trim()) throw new Error('Transcription returned an empty result');
 
     f.transcript = text.trim();
@@ -1032,6 +1069,9 @@ async function transcribeFile(f, i) {
       }
     }
 
+    // Release the file handle — no longer needed after transcription (and deletion if enabled)
+    f.handle = null;
+
   } catch (e) {
     f.error  = e.message;
     f.status = 'error';
@@ -1054,18 +1094,7 @@ async function retryFile(i) {
 // RENDER — FILE LIST
 // ══════════════════════════════════════════════════════════════════════════════
 
-const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
-const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
-const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-const BADGE = {
-  pending:      ['badge-pending',      'Pending'],
-  converting:   ['badge-converting',   'Converting'],
-  transcribing: ['badge-transcribing', 'Transcribing'],
-  done:         ['badge-done',         'Done'],
-  error:        ['badge-error',        'Error'],
-};
+// fmtBytes/fmtDur/fmtDate/esc/BADGE moved — see below BOOT section
 
 function renderFileList() {
   const container = document.getElementById('file-list');
@@ -1167,7 +1196,6 @@ function renderHistory() {
   const panel     = document.getElementById('history-panel');
   const container = document.getElementById('history-list');
   const entries   = allTx();
-
   if (!entries.length) { panel.style.display = 'none'; return; }
 
   panel.style.display = 'block';
