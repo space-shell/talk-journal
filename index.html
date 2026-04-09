@@ -444,7 +444,7 @@
           <div class="download-label" id="download-label">Preparing…</div>
         </div>
         <button class="btn btn-primary" id="btn-download" style="align-self:flex-start">
-          Download Model (~640 MB)
+          Download Model (~650 MB)
         </button>
       </div>
     </div>
@@ -1036,7 +1036,7 @@ async function retryFile(i) {
 // RENDER — FILE LIST
 // ══════════════════════════════════════════════════════════════════════════════
 
-const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : `${(b/1048576).toFixed(1)} MB`;
+const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
 const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
 const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
