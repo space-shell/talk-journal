@@ -50,7 +50,7 @@
 
     /* ── Compat warning ───────────────────────────────────────────────────── */
     #compat-warning {
-      display: none; flex-direction: column; align-items: center;
+      flex-direction: column; align-items: center;
       justify-content: center; min-height: 100vh;
       padding: 2rem; text-align: center; gap: 1rem;
     }
@@ -59,7 +59,7 @@
 
     /* ── App ──────────────────────────────────────────────────────────────── */
     #app {
-      display: none; flex-direction: column; min-height: 100vh;
+      flex-direction: column; min-height: 100vh;
       padding-bottom: 80px; /* sticky action bar */
     }
 
@@ -287,9 +287,8 @@
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
       background: var(--surface); border-top: 1px solid var(--border);
       padding: 0.75rem 1rem;
-      display: none; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
     }
-    .action-bar.visible { display: flex; }
     .action-bar .btn-primary { flex: 1; }
 
     @media (min-width: 640px) {
@@ -302,247 +301,38 @@
   </style>
 </head>
 <body>
-
-<!-- Compat warning (shown before JS if needed) -->
-<div id="compat-warning">
-  <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--yellow)">
-    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-  </svg>
-  <h1 id="compat-title">Incompatible browser</h1>
-  <p id="compat-msg"></p>
-</div>
-
-<!-- App -->
-<div id="app">
-
-  <!-- Settings overlay -->
-  <div class="overlay" id="overlay">
-    <div class="drawer">
-      <div class="drawer-handle"></div>
-      <div class="drawer-head">
-        <h2>Settings</h2>
-        <button class="icon-btn" id="close-settings" aria-label="Close settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-
-      <div class="section-label">Transcription</div>
-
-      <div class="field">
-        <label for="s-lang">Language</label>
-        <input id="s-lang" type="text" placeholder="en" maxlength="10">
-        <span class="hint">ISO 639-1 code (en, sv, fr…). Leave blank to auto-detect.</span>
-      </div>
-
-      <div class="section-label">Silence Removal (VAD)</div>
-
-      <div class="field check-row">
-        <input id="s-vad" type="checkbox">
-        <label for="s-vad">Remove silent sections before transcription</label>
-      </div>
-      <div id="vad-fields">
-        <div class="field" style="margin-top:.6rem">
-          <label for="s-thresh">RMS Threshold</label>
-          <input id="s-thresh" type="number" step="0.001" min="0" max="1" placeholder="0.01">
-          <span class="hint">Energy below this level is treated as silence</span>
-        </div>
-        <div class="field" style="margin-top:.6rem">
-          <label for="s-padding">Padding (ms)</label>
-          <input id="s-padding" type="number" step="10" min="0" placeholder="200">
-          <span class="hint">Audio retained around voiced regions</span>
-        </div>
-        <div class="field" style="margin-top:.6rem">
-          <label for="s-silence">Min silence gap (ms)</label>
-          <input id="s-silence" type="number" step="10" min="0" placeholder="300">
-          <span class="hint">Minimum gap before it is removed</span>
-        </div>
-      </div>
-
-      <div class="section-label">Storage</div>
-
-      <div class="field check-row">
-        <input id="s-autosave" type="checkbox">
-        <label for="s-autosave">Auto-save transcriptions to history</label>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:.4rem">
-        <div class="storage-bar"><div class="storage-fill" id="storage-fill" style="width:0%"></div></div>
-        <div class="storage-info" id="storage-info">Calculating…</div>
-        <button class="btn btn-danger btn-sm" id="btn-clear-history" style="align-self:flex-start">Clear History</button>
-      </div>
-
-      <div class="section-label">Drive</div>
-
-      <div class="field check-row">
-        <input id="s-delete" type="checkbox">
-        <label for="s-delete">Delete source files after transcription</label>
-      </div>
-      <p class="hint">Files are deleted per-file immediately after transcription succeeds and is saved to history. You will be asked to confirm before each batch.</p>
-
-      <div class="section-label">Connectors — Notion</div>
-
-      <div class="field">
-        <label for="s-notion-key">Integration Token</label>
-        <input id="s-notion-key" type="password" placeholder="secret_…">
-      </div>
-      <div class="field">
-        <label for="s-notion-id">Target Page or Database ID</label>
-        <input id="s-notion-id" type="text" placeholder="32-character ID">
-      </div>
-
-      <div class="section-label">Connectors — Obsidian</div>
-
-      <div class="field">
-        <label for="s-obsidian">Vault Name</label>
-        <input id="s-obsidian" type="text" placeholder="My Vault">
-        <span class="hint">Opens a new note via obsidian:// URI. Obsidian must be running locally.</span>
-      </div>
-
-      <div class="section-label">Connectors — Coming Soon</div>
-      <p class="hint" style="padding-bottom:.25rem">Claude · ChatGPT · Custom Webhook</p>
-
-      <button class="btn btn-primary" id="save-settings">Save Settings</button>
-    </div>
-  </div>
-
-  <!-- Header -->
-  <header>
-    <h1>DJI Mic 2 Transcriber</h1>
-    <div style="display:flex;align-items:center;gap:.75rem">
-      <div class="model-status">
-        <div class="model-dot" id="model-dot"></div>
-        <span id="model-label">Model not downloaded</span>
-      </div>
-      <button class="icon-btn" id="open-settings" aria-label="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-        </svg>
-        <span>Settings</span>
-      </button>
-    </div>
-  </header>
-
-  <main>
-
-    <!-- Model download panel -->
-    <div class="panel" id="model-panel" style="display:none">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">Parakeet Model Required</div>
-          <div class="panel-meta">One-time download · Cached in browser · No audio ever leaves your device</div>
-        </div>
-      </div>
-      <div style="padding:1rem;display:flex;flex-direction:column;gap:.875rem">
-        <p style="font-size:.875rem;color:var(--muted);line-height:1.65">
-          Transcription runs entirely in your browser using the Parakeet TDT 0.6B model via WebGPU and WASM.
-          The model is downloaded once and cached locally (~650 MB in WASM mode, ~2.5 GB in WebGPU mode).
-          No audio ever leaves your device.
-        </p>
-        <p id="simd-error" style="display:none;font-size:.875rem;color:var(--danger);line-height:1.65;margin:0">
-          Your browser does not support WebAssembly SIMD, which is required for in-browser transcription.
-          Please use Chrome 91+ on a desktop computer or a modern Android device (Chrome 91+).
-        </p>
-        <div id="download-progress" class="download-progress" style="display:none">
-          <div class="download-bar"><div class="download-fill" id="download-fill" style="width:0%"></div></div>
-          <div class="download-label" id="download-label">Preparing…</div>
-        </div>
-        <button class="btn btn-primary" id="btn-download" style="align-self:flex-start">
-          Download Model (~650 MB)
-        </button>
-      </div>
-    </div>
-
-    <!-- WebGPU unavailable notice -->
-    <div class="notice warn inline-notice" id="webgpu-notice" style="display:none;border-radius:var(--r)">
-      <span>WebGPU not available — using WASM mode (~650 MB). Transcription will work but may be slower than with a GPU.</span>
-    </div>
-
-    <!-- Files panel -->
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">Recordings</div>
-          <div class="panel-meta" id="drive-meta">No drive selected</div>
-        </div>
-        <button class="btn btn-ghost" id="btn-select">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-          Select DJI Drive
-        </button>
-      </div>
-
-      <!-- Delete confirmation banner -->
-      <div class="notice danger" id="delete-banner" style="display:none">
-        <span>Source files will be deleted from the DJI drive after each successful transcription. This cannot be undone.</span>
-        <button class="btn btn-ghost btn-sm" id="btn-proceed">Proceed</button>
-        <button class="btn btn-ghost btn-sm" id="btn-cancel">Cancel</button>
-      </div>
-
-      <div id="file-list">
-        <div class="empty">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-          Select the DJI Mic 2 drive to list recordings
-        </div>
-      </div>
-    </div>
-
-    <!-- History panel -->
-    <div class="panel" id="history-panel" style="display:none">
-      <div class="panel-head">
-        <div class="panel-title">History</div>
-      </div>
-      <div id="history-list"></div>
-    </div>
-
-  </main>
-
-  <!-- Sticky batch action bar -->
-  <div class="action-bar" id="action-bar">
-    <button class="btn btn-ghost btn-sm" id="btn-select-all" style="white-space:nowrap">Select all</button>
-    <button class="btn btn-primary" id="btn-transcribe" disabled>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-      Transcribe Selected
-    </button>
-    <button class="btn btn-ghost" id="btn-export-txt" disabled>.txt</button>
-    <button class="btn btn-ghost" id="btn-export-md"  disabled>.md</button>
-    <button class="btn btn-ghost" id="btn-share" style="display:none">Share</button>
-  </div>
-
-</div>
-
+<div id="root"></div>
 <script type="module">
+import { h, render } from 'https://esm.sh/preact@10';
+import { useState, useEffect } from 'https://esm.sh/preact@10/hooks';
+import { signal, batch } from 'https://esm.sh/@preact/signals@1?deps=preact@10';
+import htm from 'https://esm.sh/htm@3?deps=preact@10';
 import { fromHub } from 'https://esm.sh/parakeet.js@1.4.4';
 
+const html = htm.bind(h);
+
 // ══════════════════════════════════════════════════════════════════════════════
-// PARAKEET.JS — model: parakeet-tdt-0.6b-v3 (multilingual)
-// Library:  https://github.com/ysdede/parakeet.js  (parakeet.js@1.4.4)
-// Backend:  WebGPU (encoder) + WASM (decoder) when WebGPU is available,
-//           otherwise full WASM with int8 quantisation (~650 MB).
-// Caching:  handled internally by the library via IndexedDB (parakeet-cache-db).
+// COMPAT CHECKS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const MODEL_KEY = 'parakeet-tdt-0.6b-v3';
-let parakeetModel = null;
+const hasFilePicker = 'showDirectoryPicker' in window;
+const hasWebGPU     = 'gpu' in navigator;
+// WebAssembly SIMD is required by the WASM backend of parakeet.js
+const hasSimd = typeof WebAssembly !== 'undefined' && WebAssembly.validate(new Uint8Array([
+  0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11
+]));
 
-async function loadParakeet(onProgress) {
-  parakeetModel = await fromHub(MODEL_KEY, {
-    backend:             hasWebGPU ? 'webgpu' : 'wasm',
-    encoderQuant:        'fp32',   // int8 is silently forced to fp32 for WebGPU anyway
-    decoderQuant:        'int8',
-    preprocessorBackend: 'js',
-    ...(onProgress ? { progress: onProgress } : {}),
-  });
-  localStorage.setItem('parakeet_model_ready', 'true');
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// PURE HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
 
-async function runParakeet(float32) {
-  if (!parakeetModel) throw new Error('Model not loaded — download the model first.');
-  // transcribeLongAudio handles long DJI Mic 2 recordings (up to 30 min) via internal chunking
-  const result = await parakeetModel.transcribeLongAudio(float32, 16000, {
-    returnTimestamps: false,
-  });
-  return result.text;
-}
+const TX_PREFIX = 'transcription:';
+const TX_INDEX  = 'transcription:index';
+
+const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
+const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
+const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+const genId    = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); });
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SETTINGS
@@ -561,436 +351,244 @@ const DEFAULTS = {
   obsidian_vault_name: '',
 };
 
-let cfg = (() => {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('tj_cfg') || '{}') }; }
-  catch { return { ...DEFAULTS }; }
-})();
-
-function saveCfg() { localStorage.setItem('tj_cfg', JSON.stringify(cfg)); }
-
 // ══════════════════════════════════════════════════════════════════════════════
-// STATE
+// SIGNALS
 // ══════════════════════════════════════════════════════════════════════════════
 
-let dirHandle = null;
-let files     = []; // { handle, name, path, size, mtime, selected, status, deleted, transcript, error, savedId }
-let busy      = false;
+const cfg             = signal((() => { try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('tj_cfg') || '{}') }; } catch { return { ...DEFAULTS }; } })());
+const files           = signal([]);
+const dirHandle       = signal(null);
+const busy            = signal(false);
+const settingsOpen    = signal(false);
+const modelStatus     = signal({ dot: 'missing', label: 'Model not downloaded' });
+const modelPanelVis   = signal(false);
+const simdErrorVis    = signal(false);
+const dlProgress      = signal({ visible: false, pct: 0, label: '' });
+const webgpuNoticeVis = signal(!hasWebGPU);
+const deleteBannerVis = signal(false);
+const historyEntries  = signal([]);
+const storageInfo     = signal({ pct: 0, text: 'Calculating…', warn: false });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// PURE CONSTANTS — must be defined before boot() runs to avoid TDZ errors
+// STORAGE / HISTORY (localStorage)
 // ══════════════════════════════════════════════════════════════════════════════
-
-const TX_PREFIX = 'transcription:';
-const TX_INDEX  = 'transcription:index';
-
-const fmtBytes = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
-const fmtDur   = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
-const fmtDate  = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-const esc      = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-const BADGE = {
-  pending:      ['badge-pending',      'Pending'],
-  converting:   ['badge-converting',   'Converting'],
-  transcribing: ['badge-transcribing', 'Transcribing'],
-  done:         ['badge-done',         'Done'],
-  error:        ['badge-error',        'Error'],
-};
-
-// ══════════════════════════════════════════════════════════════════════════════
-// BOOT + COMPAT CHECK
-// ══════════════════════════════════════════════════════════════════════════════
-
-const hasFilePicker = 'showDirectoryPicker' in window;
-const hasWebGPU     = 'gpu' in navigator;
-// WebAssembly SIMD is required by the WASM backend of parakeet.js
-const hasSimd = typeof WebAssembly !== 'undefined' && WebAssembly.validate(new Uint8Array([
-  0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11
-]));
-
-if (!hasFilePicker) {
-  const el = document.getElementById('compat-warning');
-  el.style.display = 'flex';
-  document.getElementById('compat-title').textContent = 'Chromium-based browser required';
-  document.getElementById('compat-msg').textContent =
-    'This app uses the File System Access API, which is only supported in Chrome, Edge, and Brave. Please open this page in one of those browsers.';
-} else {
-  const app = document.getElementById('app');
-  app.style.display = 'flex';
-  app.style.flexDirection = 'column';
-  boot();
-}
-
-function boot() {
-  syncSettingsForm();
-  updateStorageDisplay();
-  checkWebGPUNotice();
-  checkModelStatus();
-  renderHistory();
-
-  document.getElementById('open-settings').onclick  = openSettings;
-  document.getElementById('close-settings').onclick = closeSettings;
-  document.getElementById('overlay').onclick = e => { if (e.target === e.currentTarget) closeSettings(); };
-  document.getElementById('save-settings').onclick  = onSaveSettings;
-  document.getElementById('btn-clear-history').onclick = clearHistory;
-
-  document.getElementById('btn-select').onclick     = pickDrive;
-  document.getElementById('btn-select-all').onclick = toggleSelectAll;
-  document.getElementById('btn-transcribe').onclick = requestBatch;
-  document.getElementById('btn-proceed').onclick    = () => { document.getElementById('delete-banner').style.display = 'none'; startBatch(); };
-  document.getElementById('btn-cancel').onclick     = () => { document.getElementById('delete-banner').style.display = 'none'; };
-
-  document.getElementById('btn-download').onclick   = downloadModel;
-  document.getElementById('btn-export-txt').onclick = () => exportAll('txt');
-  document.getElementById('btn-export-md').onclick  = () => exportAll('md');
-  document.getElementById('btn-share').onclick      = shareAll;
-
-  if (navigator.share) document.getElementById('btn-share').style.display = '';
-
-  document.getElementById('s-vad').addEventListener('change', syncVadFields);
-  syncVadFields();
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SETTINGS PANEL
-// ══════════════════════════════════════════════════════════════════════════════
-
-function openSettings()  { document.getElementById('overlay').classList.add('open'); updateStorageDisplay(); }
-function closeSettings() { document.getElementById('overlay').classList.remove('open'); }
-
-function syncSettingsForm() {
-  document.getElementById('s-lang').value    = cfg.language;
-  document.getElementById('s-vad').checked   = cfg.vad_enabled;
-  document.getElementById('s-thresh').value  = cfg.vad_threshold;
-  document.getElementById('s-padding').value = cfg.vad_padding_ms;
-  document.getElementById('s-silence').value = cfg.vad_min_silence_ms;
-  document.getElementById('s-autosave').checked = cfg.auto_save;
-  document.getElementById('s-delete').checked   = cfg.delete_after_transcription;
-  document.getElementById('s-notion-key').value = cfg.notion_api_key;
-  document.getElementById('s-notion-id').value  = cfg.notion_target_id;
-  document.getElementById('s-obsidian').value   = cfg.obsidian_vault_name;
-  syncVadFields();
-}
-
-function syncVadFields() {
-  const on = document.getElementById('s-vad').checked;
-  const container = document.getElementById('vad-fields');
-  container.style.opacity = on ? '1' : '.4';
-  container.querySelectorAll('input').forEach(el => el.disabled = !on);
-}
-
-function onSaveSettings() {
-  const prevDelete = cfg.delete_after_transcription;
-  cfg = {
-    language:                   document.getElementById('s-lang').value.trim(),
-    vad_enabled:                document.getElementById('s-vad').checked,
-    vad_threshold:              parseFloat(document.getElementById('s-thresh').value)  || DEFAULTS.vad_threshold,
-    vad_padding_ms:             parseInt(document.getElementById('s-padding').value)   || DEFAULTS.vad_padding_ms,
-    vad_min_silence_ms:         parseInt(document.getElementById('s-silence').value)   || DEFAULTS.vad_min_silence_ms,
-    auto_save:                  document.getElementById('s-autosave').checked,
-    delete_after_transcription: document.getElementById('s-delete').checked,
-    notion_api_key:             document.getElementById('s-notion-key').value.trim(),
-    notion_target_id:           document.getElementById('s-notion-id').value.trim(),
-    obsidian_vault_name:        document.getElementById('s-obsidian').value.trim(),
-  };
-
-  if (!prevDelete && cfg.delete_after_transcription) {
-    // alert() cannot be bypassed by clicking outside — satisfies spec requirement
-    alert(
-      'Delete after transcription enabled.\n\n' +
-      'Source WAV files will be permanently deleted from your DJI drive after each successful transcription. ' +
-      'Ensure the drive is not your only copy of these recordings.'
-    );
-  }
-
-  saveCfg();
-  closeSettings();
-  syncActionBar();
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// STORAGE + HISTORY (localStorage)
-// ══════════════════════════════════════════════════════════════════════════════
-
-// TX_PREFIX and TX_INDEX moved — see below BOOT section
 
 function getIndex() {
   try { return JSON.parse(localStorage.getItem(TX_INDEX) || '[]'); }
   catch { return []; }
 }
-
 function saveTx(entry) {
-  const idx = getIndex();
-  idx.unshift(entry.id);
+  const idx = getIndex(); idx.unshift(entry.id);
   localStorage.setItem(TX_INDEX, JSON.stringify(idx));
   localStorage.setItem(`${TX_PREFIX}${entry.id}`, JSON.stringify(entry));
 }
-
 function getTx(id) {
   try { return JSON.parse(localStorage.getItem(`${TX_PREFIX}${id}`) || 'null'); }
   catch { return null; }
 }
-
 function updateTx(id, patch) {
-  const entry = getTx(id);
-  if (!entry) return;
+  const entry = getTx(id); if (!entry) return;
   localStorage.setItem(`${TX_PREFIX}${id}`, JSON.stringify({ ...entry, ...patch }));
 }
-
 function removeTx(id) {
   localStorage.setItem(TX_INDEX, JSON.stringify(getIndex().filter(x => x !== id)));
   localStorage.removeItem(`${TX_PREFIX}${id}`);
 }
+function allTx()            { return getIndex().map(id => getTx(id)).filter(Boolean); }
+function getTxByFilename(n) { return allTx().find(e => e.filename === n) || null; }
 
-function allTx() {
-  return getIndex().map(id => getTx(id)).filter(Boolean);
-}
+function refreshHistory() { historyEntries.value = allTx(); }
 
-// Returns the most recent history entry for a given filename, or null.
-function getTxByFilename(name) {
-  return getIndex().map(id => getTx(id)).filter(Boolean).find(e => e.filename === name) || null;
-}
-
-function genId() {
-  if (crypto.randomUUID) return crypto.randomUUID();
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 3 | 8)).toString(16);
-  });
-}
-
-async function updateStorageDisplay() {
+async function refreshStorage() {
   let used = 0, total = 5 * 1024 * 1024;
   if (navigator.storage?.estimate) {
-    try { ({ usage: used, quota: total } = await navigator.storage.estimate()); }
-    catch {}
+    try { ({ usage: used, quota: total } = await navigator.storage.estimate()); } catch {}
   } else {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       used += (k.length + (localStorage.getItem(k) || '').length) * 2;
     }
   }
-
-  const pct  = Math.min(100, (used / total) * 100);
-  const fill = document.getElementById('storage-fill');
-  const info = document.getElementById('storage-info');
-  if (fill) { fill.style.width = `${pct}%`; fill.className = `storage-fill${pct > 80 ? ' warn' : ''}`; }
-  if (info) info.textContent = `${fmtBytes(used)} used of ~${fmtBytes(total)}${pct > 80 ? ' — running low' : ''}`;
+  const pct = Math.min(100, (used / total) * 100);
+  storageInfo.value = { pct, warn: pct > 80, text: `${fmtBytes(used)} used of ~${fmtBytes(total)}${pct > 80 ? ' — running low' : ''}` };
 }
 
 async function clearHistory() {
   if (!confirm('Delete all saved transcriptions? Source audio files are not affected.')) return;
   getIndex().forEach(id => localStorage.removeItem(`${TX_PREFIX}${id}`));
   localStorage.removeItem(TX_INDEX);
-  renderHistory();
-  updateStorageDisplay();
+  refreshHistory(); refreshStorage();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PARAKEET.JS
+// ══════════════════════════════════════════════════════════════════════════════
+
+const MODEL_KEY = 'parakeet-tdt-0.6b-v3';
+let parakeetModel = null;
+
+async function loadParakeet(onProgress) {
+  parakeetModel = await fromHub(MODEL_KEY, {
+    backend:             hasWebGPU ? 'webgpu' : 'wasm',
+    encoderQuant:        'fp32',   // int8 silently forced to fp32 for WebGPU anyway
+    decoderQuant:        'int8',
+    preprocessorBackend: 'js',
+    ...(onProgress ? { progress: onProgress } : {}),
+  });
+  localStorage.setItem('parakeet_model_ready', 'true');
+}
+
+async function runParakeet(float32) {
+  if (!parakeetModel) throw new Error('Model not loaded — download the model first.');
+  const result = await parakeetModel.transcribeLongAudio(float32, 16000, { returnTimestamps: false });
+  return result.text;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MODEL MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
-function checkWebGPUNotice() {
-  if (!hasWebGPU) document.getElementById('webgpu-notice').style.display = 'flex';
-}
-
 async function checkModelStatus() {
-  const dot   = document.getElementById('model-dot');
-  const label = document.getElementById('model-label');
-  const panel = document.getElementById('model-panel');
-
   if (!hasSimd) {
-    dot.className     = 'model-dot missing';
-    label.textContent = 'Not supported';
-    panel.style.display = 'block';
-    document.getElementById('simd-error').style.display = 'block';
-    document.getElementById('btn-download').disabled = true;
-    document.getElementById('btn-download').style.display = 'none';
+    modelStatus.value   = { dot: 'missing', label: 'Not supported' };
+    modelPanelVis.value = true;
+    simdErrorVis.value  = true;
     return;
   }
-
   if (localStorage.getItem('parakeet_model_ready') === 'true') {
-    // Model was previously downloaded — load from IndexedDB cache (fast)
-    dot.className     = 'model-dot loading';
-    label.textContent = 'Loading model…';
-    panel.style.display = 'none';
+    modelStatus.value   = { dot: 'loading', label: 'Loading model…' };
+    modelPanelVis.value = false;
     try {
       await loadParakeet();
-      dot.className     = 'model-dot cached';
-      label.textContent = 'Model ready';
-      syncActionBar();
-    } catch (e) {
-      // IndexedDB cache may have been cleared
+      modelStatus.value = { dot: 'cached', label: 'Model ready' };
+    } catch {
       localStorage.removeItem('parakeet_model_ready');
-      dot.className     = 'model-dot missing';
-      label.textContent = 'Model not downloaded';
-      panel.style.display = 'block';
+      modelStatus.value   = { dot: 'missing', label: 'Model not downloaded' };
+      modelPanelVis.value = true;
     }
   } else {
-    dot.className     = 'model-dot missing';
-    label.textContent = 'Model not downloaded';
-    panel.style.display = 'block';
+    modelStatus.value   = { dot: 'missing', label: 'Model not downloaded' };
+    modelPanelVis.value = true;
   }
 }
 
 async function downloadModel() {
-  const btn   = document.getElementById('btn-download');
-  const prog  = document.getElementById('download-progress');
-  const fill  = document.getElementById('download-fill');
-  const dlLbl = document.getElementById('download-label');
-  const dot   = document.getElementById('model-dot');
-  const label = document.getElementById('model-label');
-
-  btn.disabled       = true;
-  prog.style.display = 'block';
-  dot.className      = 'model-dot loading';
-  label.textContent  = 'Downloading…';
-  dlLbl.textContent  = 'Starting download…';
-
+  dlProgress.value  = { visible: true, pct: 0, label: 'Starting download…' };
+  modelStatus.value = { dot: 'loading', label: 'Downloading…' };
   try {
-    await loadParakeet((p) => {
+    await loadParakeet(p => {
       if (!p) return;
-      // parakeet.js progress callback shape: { status, file, progress, loaded, total }
-      const pct = typeof p === 'number'      ? p
-        : p.progress != null                 ? p.progress
-        : (p.loaded && p.total)              ? (p.loaded / p.total * 100)
-        : null;
-      if (pct != null) fill.style.width = `${Math.min(99, pct)}%`;
-      if (p.file)              dlLbl.textContent = `Downloading ${p.file}…`;
-      else if (p.status === 'loading') dlLbl.textContent = 'Loading model into memory…';
+      const pct = typeof p === 'number' ? p : p.progress != null ? p.progress : (p.loaded && p.total) ? (p.loaded / p.total * 100) : null;
+      dlProgress.value = {
+        visible: true,
+        pct:   pct != null ? Math.min(99, pct) : dlProgress.value.pct,
+        label: p.file ? `Downloading ${p.file}…` : p.status === 'loading' ? 'Loading model into memory…' : dlProgress.value.label,
+      };
     });
-
-    fill.style.width  = '100%';
-    dot.className     = 'model-dot cached';
-    label.textContent = 'Model ready';
-    document.getElementById('model-panel').style.display = 'none';
-    syncActionBar();
+    dlProgress.value  = { visible: true, pct: 100, label: 'Done' };
+    modelStatus.value = { dot: 'cached', label: 'Model ready' };
+    modelPanelVis.value = false;
   } catch (e) {
-    dlLbl.textContent  = `Failed: ${e.message}`;
-    dot.className      = 'model-dot missing';
-    label.textContent  = 'Download failed';
-    btn.disabled       = false;
+    dlProgress.value  = { ...dlProgress.value, label: `Failed: ${e.message}` };
+    modelStatus.value = { dot: 'missing', label: 'Download failed' };
     console.error('Model load failed:', e);
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// DRIVE PICKER
-// ══════════════════════════════════════════════════════════════════════════════
-
-async function pickDrive() {
-  try {
-    const mode = cfg.delete_after_transcription ? 'readwrite' : 'read';
-    dirHandle  = await window.showDirectoryPicker({ mode });
-    files      = [];
-    await scan(dirHandle, '');
-    files.sort((a, b) => a.path.localeCompare(b.path));
-    renderFileList();
-    syncActionBar();
-  } catch (e) {
-    if (e.name !== 'AbortError') console.error(e);
-  }
-}
-
-async function scan(handle, prefix) {
-  for await (const [name, entry] of handle.entries()) {
-    const path = prefix ? `${prefix}/${name}` : name;
-    if (entry.kind === 'file' && name.toLowerCase().endsWith('.wav')) {
-      const file    = await entry.getFile();
-      const existing = getTxByFilename(name);
-      files.push({
-        handle:     entry,
-        name, path,
-        size:       file.size,
-        mtime:      file.lastModified,
-        // Pre-populate from history if already transcribed; uncheck so it's skipped by default
-        selected:   !existing,
-        status:     existing ? 'done'       : 'pending',
-        transcript: existing ? existing.text : null,
-        savedId:    existing ? existing.id   : null,
-        deleted:    existing ? (existing.deleted ?? false) : false,
-        error:      null,
-      });
-    } else if (entry.kind === 'directory') {
-      await scan(entry, path);
-    }
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 // AUDIO PIPELINE
-// Returns Float32Array (mono 16kHz) ready for parakeet.js directly.
+// Returns Float32Array (mono 16 kHz) ready for parakeet.js directly.
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function prepareAudio(arrayBuffer) {
-  // Decode — handles 24-bit PCM, 32-bit float, any sample rate
   const audioCtx    = new AudioContext();
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
   await audioCtx.close();
-
-  // Resample to 16kHz mono via OfflineAudioContext
   const targetRate = 16000;
   const numFrames  = Math.ceil(audioBuffer.duration * targetRate);
   const offCtx     = new OfflineAudioContext(1, numFrames, targetRate);
   const src        = offCtx.createBufferSource();
-  src.buffer       = audioBuffer;
-  src.connect(offCtx.destination);
-  src.start();
+  src.buffer = audioBuffer; src.connect(offCtx.destination); src.start();
   const rendered = await offCtx.startRendering();
-
   let float32 = rendered.getChannelData(0);
-  if (cfg.vad_enabled) float32 = removeSilence(float32, targetRate);
+  if (cfg.value.vad_enabled) float32 = removeSilence(float32, targetRate);
   return float32;
 }
 
 function removeSilence(float32, sampleRate) {
+  const c = cfg.value;
   const chunkMs      = 20;
   const chunkSize    = Math.floor(sampleRate * chunkMs / 1000);
-  const padChunks    = Math.ceil(cfg.vad_padding_ms / chunkMs);
-  const minSilChunks = Math.ceil(cfg.vad_min_silence_ms / chunkMs);
-  const threshold    = cfg.vad_threshold;
+  const padChunks    = Math.ceil(c.vad_padding_ms / chunkMs);
+  const minSilChunks = Math.ceil(c.vad_min_silence_ms / chunkMs);
+  const threshold    = c.vad_threshold;
 
-  // Classify voiced/silent
   const voiced = [];
   for (let i = 0; i < float32.length; i += chunkSize) {
     const chunk = float32.subarray(i, i + chunkSize);
     const rms   = Math.sqrt(chunk.reduce((s, x) => s + x * x, 0) / chunk.length);
     voiced.push(rms >= threshold);
   }
-
-  // Expand voiced by padding
   const padded = voiced.slice();
   for (let i = 0; i < voiced.length; i++) {
     if (voiced[i]) {
-      const lo = Math.max(0, i - padChunks);
-      const hi = Math.min(voiced.length, i + padChunks + 1);
+      const lo = Math.max(0, i - padChunks), hi = Math.min(voiced.length, i + padChunks + 1);
       for (let j = lo; j < hi; j++) padded[j] = true;
     }
   }
-
-  // Fill short silence gaps
   let run = 0;
   for (let i = 0; i <= padded.length; i++) {
-    if (i < padded.length && !padded[i]) {
-      run++;
-    } else {
-      if (run > 0 && run < minSilChunks) {
-        for (let j = i - run; j < i; j++) padded[j] = true;
-      }
-      run = 0;
+    if (i < padded.length && !padded[i]) { run++; }
+    else { if (run > 0 && run < minSilChunks) for (let j = i - run; j < i; j++) padded[j] = true; run = 0; }
+  }
+  const parts = [];
+  for (let i = 0; i < padded.length; i++) if (padded[i]) parts.push(float32.subarray(i * chunkSize, Math.min((i+1)*chunkSize, float32.length)));
+  if (!parts.length) return float32;
+  const out = new Float32Array(parts.reduce((s, c) => s + c.length, 0));
+  let off = 0; for (const p of parts) { out.set(p, off); off += p.length; }
+  return out;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DRIVE PICKER
+// ══════════════════════════════════════════════════════════════════════════════
+
+function updateFile(i, patch) {
+  files.value = files.value.map((f, idx) => idx === i ? { ...f, ...patch } : f);
+}
+
+async function pickDrive() {
+  try {
+    const mode   = cfg.value.delete_after_transcription ? 'readwrite' : 'read';
+    const handle = await window.showDirectoryPicker({ mode });
+    const found  = [];
+    await scan(handle, '', found);
+    found.sort((a, b) => a.path.localeCompare(b.path));
+    batch(() => { dirHandle.value = handle; files.value = found; });
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(e);
+  }
+}
+
+async function scan(handle, prefix, found) {
+  for await (const [name, entry] of handle.entries()) {
+    const path = prefix ? `${prefix}/${name}` : name;
+    if (entry.kind === 'file' && name.toLowerCase().endsWith('.wav')) {
+      const file     = await entry.getFile();
+      const existing = getTxByFilename(name);
+      found.push({
+        handle: entry, name, path, size: file.size, mtime: file.lastModified,
+        selected:   !existing,
+        status:     existing ? 'done'         : 'pending',
+        transcript: existing ? existing.text  : null,
+        savedId:    existing ? existing.id    : null,
+        deleted:    existing ? (existing.deleted ?? false) : false,
+        error: null,
+      });
+    } else if (entry.kind === 'directory') {
+      await scan(entry, path, found);
     }
   }
-
-  // Concatenate voiced chunks
-  const parts = [];
-  for (let i = 0; i < padded.length; i++) {
-    if (padded[i]) parts.push(float32.subarray(i * chunkSize, Math.min((i + 1) * chunkSize, float32.length)));
-  }
-  if (!parts.length) return float32; // all-silence fallback
-
-  const out = new Float32Array(parts.reduce((s, c) => s + c.length, 0));
-  let off = 0;
-  for (const p of parts) { out.set(p, off); off += p.length; }
-  return out;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -998,257 +596,83 @@ function removeSilence(float32, sampleRate) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function requestBatch() {
-  if (busy) return;
-  if (cfg.delete_after_transcription) {
-    document.getElementById('delete-banner').style.display = 'flex';
-  } else {
-    startBatch();
-  }
+  if (busy.value) return;
+  if (cfg.value.delete_after_transcription) { deleteBannerVis.value = true; }
+  else startBatch();
 }
 
 async function startBatch() {
-  if (busy) return;
-  busy = true;
-  syncActionBar();
-
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
+  if (busy.value) return;
+  busy.value = true;
+  for (let i = 0; i < files.value.length; i++) {
+    const f = files.value[i];
     if (!f.selected || f.status === 'done') continue;
-    await transcribeFile(f, i);
+    await transcribeFile(i);
   }
-
-  busy = false;
-  syncActionBar();
-  renderHistory();
+  busy.value = false;
+  refreshHistory();
 }
 
-async function transcribeFile(f, i) {
-  f.status = 'converting';
-  f.error  = null;
-  patchItem(i);
-
+async function transcribeFile(i) {
+  updateFile(i, { status: 'converting', error: null });
   try {
-    const raw      = await f.handle.getFile();
-    let   float32  = await prepareAudio(await raw.arrayBuffer());
+    const raw    = await files.value[i].handle.getFile();
+    let float32  = await prepareAudio(await raw.arrayBuffer());
 
-    f.status = 'transcribing';
-    patchItem(i);
+    updateFile(i, { status: 'transcribing' });
 
     const text = await runParakeet(float32);
-    float32 = null; // release audio buffer (~100 MB+) as soon as inference is done
+    float32 = null; // release ~100 MB+ audio buffer
 
     if (!text?.trim()) throw new Error('Transcription returned an empty result');
 
-    f.transcript = text.trim();
-    f.status     = 'done';
+    const transcript = text.trim();
+    updateFile(i, { transcript, status: 'done' });
+
+    let savedId = files.value[i].savedId;
 
     // Persist — must succeed before deletion is allowed
-    if (cfg.auto_save) {
+    if (cfg.value.auto_save) {
       const entry = {
         id:              genId(),
-        filename:        f.name,
+        filename:        files.value[i].name,
         transcribedAt:   new Date().toISOString(),
-        durationSeconds: Math.round(f.size / (17 * 1024 * 1024) * 60),
-        text:            f.transcript,
-        silenceRemoved:  cfg.vad_enabled,
+        durationSeconds: Math.round(files.value[i].size / (17 * 1024 * 1024) * 60),
+        text:            transcript,
+        silenceRemoved:  cfg.value.vad_enabled,
         deleted:         false,
       };
       saveTx(entry);
-      f.savedId = entry.id;
-      updateStorageDisplay();
+      savedId = entry.id;
+      updateFile(i, { savedId });
+      refreshStorage();
     }
 
     // Per-file deletion — only after localStorage confirmed
-    if (cfg.delete_after_transcription && f.savedId) {
+    if (cfg.value.delete_after_transcription && savedId) {
       try {
-        await f.handle.remove();
-        f.deleted = true;
-        if (f.savedId) updateTx(f.savedId, { deleted: true });
-      } catch (e) {
-        console.warn('Could not delete', f.name, e);
-      }
+        await files.value[i].handle.remove();
+        updateFile(i, { deleted: true });
+        updateTx(savedId, { deleted: true });
+      } catch (e) { console.warn('Could not delete', files.value[i].name, e); }
     }
 
-    // Release the file handle — no longer needed after transcription (and deletion if enabled)
-    f.handle = null;
-
+    updateFile(i, { handle: null }); // release file handle
   } catch (e) {
-    f.error  = e.message;
-    f.status = 'error';
+    updateFile(i, { error: e.message, status: 'error' });
   }
-
-  patchItem(i);
 }
 
 async function retryFile(i) {
-  if (busy) return;
-  busy = true;
-  syncActionBar();
-  await transcribeFile(files[i], i);
-  busy = false;
-  syncActionBar();
-  renderHistory();
+  if (busy.value) return;
+  busy.value = true;
+  await transcribeFile(i);
+  busy.value = false;
+  refreshHistory();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// RENDER — FILE LIST
-// ══════════════════════════════════════════════════════════════════════════════
-
-// fmtBytes/fmtDur/fmtDate/esc/BADGE moved — see below BOOT section
-
-function renderFileList() {
-  const container = document.getElementById('file-list');
-  const meta      = document.getElementById('drive-meta');
-
-  if (!files.length) {
-    container.innerHTML = `<div class="empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>No WAV files found on this drive</div>`;
-    meta.textContent = dirHandle ? `${dirHandle.name} — 0 files` : 'No drive selected';
-    return;
-  }
-
-  const selCount = files.filter(f => f.selected).length;
-  const selSize  = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
-  const totSize  = files.reduce((a, f) => a + f.size, 0);
-  meta.textContent = `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} · ${selCount} selected · ${fmtDur(selSize)}`;
-
-  container.innerHTML = files.map((f, i) => fileItemHTML(f, i)).join('');
-
-  container.querySelectorAll('.file-check').forEach(cb => {
-    cb.addEventListener('change', e => {
-      files[+e.target.dataset.i].selected = e.target.checked;
-      syncActionBar();
-      syncMeta();
-    });
-  });
-}
-
-function fileItemHTML(f, i) {
-  const [bc, bl] = BADGE[f.status] || BADGE.pending;
-  const inProgress = f.status === 'converting' || f.status === 'transcribing';
-  const connectors = [
-    cfg.notion_api_key && cfg.notion_target_id ? `<button class="btn btn-ghost btn-sm" onclick="sendToNotion(${i})">Notion</button>` : '',
-    cfg.obsidian_vault_name ? `<button class="btn btn-ghost btn-sm" onclick="sendToObsidian(${i})">Obsidian</button>` : '',
-  ].join('');
-
-  return `
-    <div class="file-item${f.deleted ? ' fi-deleted' : ''}" id="fi-${i}">
-      <div class="file-row">
-        <input type="checkbox" class="file-check" data-i="${i}" ${f.selected?'checked':''} ${busy?'disabled':''}>
-        <div class="file-info">
-          <div class="file-name" title="${esc(f.path)}">${esc(f.path)}</div>
-          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)} · ${fmtDate(f.mtime)}</div>
-          <div class="file-badges">
-            <span class="badge ${bc}">${bl}</span>
-            ${f.deleted ? `<span class="badge badge-deleted">Deleted from drive</span>` : ''}
-          </div>
-        </div>
-      </div>
-      ${inProgress ? `<div class="progress-bar"><div class="progress-fill"></div></div>` : ''}
-      ${f.transcript !== null ? `
-        <div class="transcript">${esc(f.transcript)}</div>
-        <div class="tx-actions">
-          <button class="btn btn-ghost btn-sm" onclick="copyText(${i})">Copy</button>
-          ${navigator.share ? `<button class="btn btn-ghost btn-sm" onclick="shareOne(${i})">Share</button>` : ''}
-          ${connectors}
-        </div>` : ''}
-      ${f.error ? `
-        <div class="error-msg">
-          <span>${esc(f.error)}</span>
-          <button class="btn btn-ghost btn-sm" onclick="retryFile(${i})">Retry</button>
-        </div>` : ''}
-    </div>`;
-}
-
-function patchItem(i) {
-  const el = document.getElementById(`fi-${i}`);
-  if (el) el.outerHTML = fileItemHTML(files[i], i);
-}
-
-function syncMeta() {
-  const selCount = files.filter(f => f.selected).length;
-  const selSize  = files.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
-  const totSize  = files.reduce((a, f) => a + f.size, 0);
-  document.getElementById('drive-meta').textContent =
-    `${dirHandle.name} — ${files.length} file${files.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} · ${selCount} selected · ${fmtDur(selSize)}`;
-}
-
-function toggleSelectAll() {
-  const allSelected = files.every(f => f.selected);
-  files.forEach(f => f.selected = !allSelected);
-  renderFileList();
-  syncActionBar();
-}
-
-function syncActionBar() {
-  const bar     = document.getElementById('action-bar');
-  const hasDone = files.some(f => f.transcript !== null);
-  bar.className = files.length ? 'action-bar visible' : 'action-bar';
-  document.getElementById('btn-transcribe').disabled = busy || !files.some(f => f.selected);
-  document.getElementById('btn-export-txt').disabled = !hasDone;
-  document.getElementById('btn-export-md').disabled  = !hasDone;
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// RENDER — HISTORY
-// ══════════════════════════════════════════════════════════════════════════════
-
-function renderHistory() {
-  const panel     = document.getElementById('history-panel');
-  const container = document.getElementById('history-list');
-  const entries   = allTx();
-  if (!entries.length) { panel.style.display = 'none'; return; }
-
-  panel.style.display = 'block';
-  container.innerHTML = entries.map(historyItemHTML).join('');
-}
-
-function historyItemHTML(e) {
-  const preview = esc(e.text.slice(0, 100)) + (e.text.length > 100 ? '…' : '');
-  return `
-    <div class="history-item" id="hx-${e.id}">
-      <div class="history-head">
-        <span class="history-filename">${esc(e.filename)}${e.deleted ? ' <span style="opacity:.5">(deleted from drive)</span>' : ''}</span>
-        <span class="history-date">${fmtDate(new Date(e.transcribedAt).getTime())}</span>
-      </div>
-      <div class="history-preview">${preview}</div>
-      <div class="history-full">${esc(e.text)}</div>
-      <div class="history-actions">
-        <button class="btn btn-ghost btn-sm" onclick="toggleHx('${e.id}')">Expand</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyHx('${e.id}')">Copy</button>
-        ${navigator.share ? `<button class="btn btn-ghost btn-sm" onclick="shareHx('${e.id}')">Share</button>` : ''}
-        <button class="btn btn-danger btn-sm" onclick="deleteHx('${e.id}')">Delete</button>
-      </div>
-    </div>`;
-}
-
-function toggleHx(id) {
-  const el = document.getElementById(`hx-${id}`);
-  if (!el) return;
-  const expanded = el.classList.toggle('expanded');
-  el.querySelector('.history-actions .btn-ghost').textContent = expanded ? 'Collapse' : 'Expand';
-}
-
-function copyHx(id) {
-  const e = getTx(id);
-  if (e) copyToClipboard(e.text);
-}
-
-async function shareHx(id) {
-  const e = getTx(id);
-  if (!e) return;
-  try { await navigator.share({ title: e.filename, text: e.text }); }
-  catch { copyToClipboard(e.text); }
-}
-
-function deleteHx(id) {
-  if (!confirm('Remove this transcription from history? Source audio is not affected.')) return;
-  removeTx(id);
-  renderHistory();
-  updateStorageDisplay();
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// COPY / SHARE / EXPORT
+// COPY / SHARE / EXPORT / CONNECTORS
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function copyToClipboard(text) {
@@ -1256,64 +680,44 @@ async function copyToClipboard(text) {
   catch { prompt('Copy the text below:', text); }
 }
 
-function copyText(i) { copyToClipboard(files[i]?.transcript || ''); }
-
 async function shareOne(i) {
-  const f = files[i];
-  if (!f?.transcript) return;
+  const f = files.value[i]; if (!f?.transcript) return;
   try { await navigator.share({ title: f.name, text: f.transcript }); }
   catch { copyToClipboard(f.transcript); }
 }
 
 async function shareAll() {
-  const done = files.filter(f => f.transcript !== null);
-  if (!done.length) return;
+  const done = files.value.filter(f => f.transcript !== null); if (!done.length) return;
   const text = done.map(f => `${f.path}\n\n${f.transcript}`).join('\n\n---\n\n');
   try { await navigator.share({ title: 'Transcriptions', text }); }
   catch { copyToClipboard(text); }
 }
 
 function exportAll(fmt) {
-  const done = files.filter(f => f.transcript !== null);
-  if (!done.length) return;
-  const sep     = '\n\n---\n\n';
+  const done = files.value.filter(f => f.transcript !== null); if (!done.length) return;
+  const sep  = '\n\n---\n\n';
   const content = fmt === 'txt'
     ? done.map(f => `${f.path}\n\n${f.transcript}`).join(sep)
     : done.map(f => `## ${f.path}\n\n${f.transcript}`).join(sep);
   const a = Object.assign(document.createElement('a'), {
-    href:     URL.createObjectURL(new Blob([content], { type: 'text/plain' })),
+    href: URL.createObjectURL(new Blob([content], { type: 'text/plain' })),
     download: `transcriptions.${fmt}`,
   });
-  a.click();
-  URL.revokeObjectURL(a.href);
+  a.click(); URL.revokeObjectURL(a.href);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// CONNECTORS
-// ══════════════════════════════════════════════════════════════════════════════
-
 async function sendToNotion(i) {
-  const f = files[i];
-  if (!f?.transcript) return;
+  const f = files.value[i]; if (!f?.transcript) return;
   try {
-    const res = await fetch(`https://api.notion.com/v1/blocks/${cfg.notion_target_id}/children`, {
+    const res = await fetch(`https://api.notion.com/v1/blocks/${cfg.value.notion_target_id}/children`, {
       method: 'PATCH',
-      headers: {
-        'Authorization':   `Bearer ${cfg.notion_api_key}`,
-        'Notion-Version':  '2022-06-28',
-        'Content-Type':    'application/json',
-      },
-      body: JSON.stringify({
-        children: [
-          { type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: f.name } }] } },
-          { type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: f.transcript } }] } },
-        ],
-      }),
+      headers: { 'Authorization': `Bearer ${cfg.value.notion_api_key}`, 'Notion-Version': '2022-06-28', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ children: [
+        { type: 'heading_2', heading_2: { rich_text: [{ type: 'text', text: { content: f.name } }] } },
+        { type: 'paragraph', paragraph: { rich_text: [{ type: 'text', text: { content: f.transcript } }] } },
+      ] }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || `HTTP ${res.status}`);
-    }
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.message || `HTTP ${res.status}`); }
     alert('Sent to Notion.');
   } catch (e) {
     alert(`Notion export failed: ${e.message}\n\nNote: Notion's API may block browser-direct requests due to CORS restrictions.`);
@@ -1321,20 +725,391 @@ async function sendToNotion(i) {
 }
 
 function sendToObsidian(i) {
-  const f = files[i];
-  if (!f?.transcript || !cfg.obsidian_vault_name) return;
+  const f = files.value[i]; if (!f?.transcript || !cfg.value.obsidian_vault_name) return;
   const name = f.name.replace(/\.wav$/i, '');
-  window.open(
-    `obsidian://new?vault=${encodeURIComponent(cfg.obsidian_vault_name)}&name=${encodeURIComponent(name)}&content=${encodeURIComponent(f.transcript)}`
-  );
+  window.open(`obsidian://new?vault=${encodeURIComponent(cfg.value.obsidian_vault_name)}&name=${encodeURIComponent(name)}&content=${encodeURIComponent(f.transcript)}`);
 }
 
-// ── Expose functions used by inline onclick handlers in dynamically-built HTML ──
-// (required because this is a module script — functions are not global by default)
-Object.assign(window, {
-  retryFile, copyText, shareOne, sendToNotion, sendToObsidian,
-  toggleHx, copyHx, shareHx, deleteHx,
-});
+// ══════════════════════════════════════════════════════════════════════════════
+// SVG ICONS
+// ══════════════════════════════════════════════════════════════════════════════
+
+const IconGear   = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`;
+const IconX      = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+const IconFolder = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
+const IconPlay   = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+const BADGE_MAP = {
+  pending:      ['badge-pending',      'Pending'],
+  converting:   ['badge-converting',   'Converting'],
+  transcribing: ['badge-transcribing', 'Transcribing'],
+  done:         ['badge-done',         'Done'],
+  error:        ['badge-error',        'Error'],
+};
+
+function FileItem({ f, i }) {
+  const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
+  const inProgress = f.status === 'converting' || f.status === 'transcribing';
+  const isBusy     = busy.value;
+  const c          = cfg.value;
+  return html`
+    <div class=${'file-item' + (f.deleted ? ' fi-deleted' : '')}>
+      <div class="file-row">
+        <input type="checkbox" class="file-check" checked=${f.selected} disabled=${isBusy}
+          onChange=${e => updateFile(i, { selected: e.target.checked })} />
+        <div class="file-info">
+          <div class="file-name" title=${f.path}>${f.path}</div>
+          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)} · ${fmtDate(f.mtime)}</div>
+          <div class="file-badges">
+            <span class=${'badge ' + bc}>${bl}</span>
+            ${f.deleted && html`<span class="badge badge-deleted">Deleted from drive</span>`}
+          </div>
+        </div>
+      </div>
+      ${inProgress && html`<div class="progress-bar"><div class="progress-fill"></div></div>`}
+      ${f.transcript !== null && html`
+        <div class="transcript">${f.transcript}</div>
+        <div class="tx-actions">
+          <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(f.transcript)}>Copy</button>
+          ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${() => shareOne(i)}>Share</button>`}
+          ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
+          ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
+        </div>
+      `}
+      ${f.error && html`
+        <div class="error-msg">
+          <span>${f.error}</span>
+          <button class="btn btn-ghost btn-sm" onClick=${() => retryFile(i)}>Retry</button>
+        </div>
+      `}
+    </div>`;
+}
+
+function FilesPanel() {
+  const fs = files.value;
+  const dh = dirHandle.value;
+  const selCount = fs.filter(f => f.selected).length;
+  const selSize  = fs.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
+  const totSize  = fs.reduce((a, f) => a + f.size, 0);
+  const meta = dh && fs.length
+    ? `${dh.name} — ${fs.length} file${fs.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} · ${selCount} selected · ${fmtDur(selSize)}`
+    : dh ? `${dh.name} — 0 files` : 'No drive selected';
+  return html`
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Recordings</div>
+          <div class="panel-meta">${meta}</div>
+        </div>
+        <button class="btn btn-ghost" onClick=${pickDrive}>
+          <${IconFolder} /> Select DJI Drive
+        </button>
+      </div>
+      ${deleteBannerVis.value && html`
+        <div class="notice danger">
+          <span>Source files will be deleted from the DJI drive after each successful transcription. This cannot be undone.</span>
+          <button class="btn btn-ghost btn-sm" onClick=${() => { deleteBannerVis.value = false; startBatch(); }}>Proceed</button>
+          <button class="btn btn-ghost btn-sm" onClick=${() => { deleteBannerVis.value = false; }}>Cancel</button>
+        </div>
+      `}
+      <div>
+        ${fs.length === 0 ? html`
+          <div class="empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+            ${dh ? 'No WAV files found on this drive' : 'Select the DJI Mic 2 drive to list recordings'}
+          </div>
+        ` : fs.map((f, i) => html`<${FileItem} key=${f.path} f=${f} i=${i} />`)}
+      </div>
+    </div>`;
+}
+
+function HistoryItem({ e }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = e.text.slice(0, 100) + (e.text.length > 100 ? '…' : '');
+  const onDelete = () => {
+    if (!confirm('Remove this transcription from history? Source audio is not affected.')) return;
+    removeTx(e.id); refreshHistory(); refreshStorage();
+  };
+  return html`
+    <div class=${'history-item' + (expanded ? ' expanded' : '')}>
+      <div class="history-head">
+        <span class="history-filename">
+          ${e.filename}
+          ${e.deleted && html` <span style="opacity:.5">(deleted from drive)</span>`}
+        </span>
+        <span class="history-date">${fmtDate(new Date(e.transcribedAt).getTime())}</span>
+      </div>
+      <div class="history-preview">${preview}</div>
+      <div class="history-full">${e.text}</div>
+      <div class="history-actions">
+        <button class="btn btn-ghost btn-sm" onClick=${() => setExpanded(!expanded)}>${expanded ? 'Collapse' : 'Expand'}</button>
+        <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(e.text)}>Copy</button>
+        ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${async () => { try { await navigator.share({ title: e.filename, text: e.text }); } catch { copyToClipboard(e.text); } }}>Share</button>`}
+        <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
+      </div>
+    </div>`;
+}
+
+function HistoryPanel() {
+  const entries = historyEntries.value;
+  if (!entries.length) return null;
+  return html`
+    <div class="panel">
+      <div class="panel-head"><div class="panel-title">History</div></div>
+      <div>${entries.map(e => html`<${HistoryItem} key=${e.id} e=${e} />`)}</div>
+    </div>`;
+}
+
+function ModelPanel() {
+  if (!modelPanelVis.value) return null;
+  const dl   = dlProgress.value;
+  const simd = simdErrorVis.value;
+  return html`
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Parakeet Model Required</div>
+          <div class="panel-meta">One-time download · Cached in browser · No audio ever leaves your device</div>
+        </div>
+      </div>
+      <div style="padding:1rem;display:flex;flex-direction:column;gap:.875rem">
+        <p style="font-size:.875rem;color:var(--muted);line-height:1.65">
+          Transcription runs entirely in your browser using the Parakeet TDT 0.6B model via WebGPU and WASM.
+          The model is downloaded once and cached locally (~650 MB in WASM mode, ~2.5 GB in WebGPU mode).
+          No audio ever leaves your device.
+        </p>
+        ${simd && html`
+          <p style="font-size:.875rem;color:var(--red);line-height:1.65;margin:0">
+            Your browser does not support WebAssembly SIMD, which is required for in-browser transcription.
+            Please use Chrome 91+ on a desktop computer or a modern Android device (Chrome 91+).
+          </p>
+        `}
+        ${dl.visible && html`
+          <div class="download-progress">
+            <div class="download-bar"><div class="download-fill" style=${'width:' + dl.pct + '%'}></div></div>
+            <div class="download-label">${dl.label}</div>
+          </div>
+        `}
+        ${!simd && html`
+          <button class="btn btn-primary" style="align-self:flex-start" disabled=${dl.visible} onClick=${downloadModel}>
+            Download Model (~650 MB)
+          </button>
+        `}
+      </div>
+    </div>`;
+}
+
+function Header() {
+  const ms = modelStatus.value;
+  return html`
+    <header>
+      <h1>DJI Mic 2 Transcriber</h1>
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <div class="model-status">
+          <div class=${'model-dot' + (ms.dot ? ' ' + ms.dot : '')}></div>
+          <span>${ms.label}</span>
+        </div>
+        <button class="icon-btn" aria-label="Settings" onClick=${() => { settingsOpen.value = true; refreshStorage(); }}>
+          <${IconGear} /> <span>Settings</span>
+        </button>
+      </div>
+    </header>`;
+}
+
+function ActionBar() {
+  const fs     = files.value;
+  const isBusy = busy.value;
+  if (!fs.length) return null;
+  const hasDone     = fs.some(f => f.transcript !== null);
+  const allSelected = fs.every(f => f.selected);
+  return html`
+    <div class="action-bar">
+      <button class="btn btn-ghost btn-sm" style="white-space:nowrap"
+        onClick=${() => { files.value = fs.map(f => ({ ...f, selected: !allSelected })); }}>
+        ${allSelected ? 'Deselect all' : 'Select all'}
+      </button>
+      <button class="btn btn-primary" disabled=${isBusy || !fs.some(f => f.selected)} onClick=${requestBatch}>
+        <${IconPlay} /> Transcribe Selected
+      </button>
+      <button class="btn btn-ghost" disabled=${!hasDone} onClick=${() => exportAll('txt')}>.txt</button>
+      <button class="btn btn-ghost" disabled=${!hasDone} onClick=${() => exportAll('md')}>.md</button>
+      ${navigator.share && html`<button class="btn btn-ghost" onClick=${shareAll}>Share</button>`}
+    </div>`;
+}
+
+function SettingsDrawer() {
+  const open = settingsOpen.value;
+  const c    = cfg.value;
+
+  const [lang,      setLang]      = useState(c.language);
+  const [vadOn,     setVadOn]     = useState(c.vad_enabled);
+  const [thresh,    setThresh]    = useState(c.vad_threshold);
+  const [pad,       setPad]       = useState(c.vad_padding_ms);
+  const [silGap,    setSilGap]    = useState(c.vad_min_silence_ms);
+  const [autoSave,  setAutoSave]  = useState(c.auto_save);
+  const [delAfter,  setDelAfter]  = useState(c.delete_after_transcription);
+  const [notionKey, setNotionKey] = useState(c.notion_api_key);
+  const [notionId,  setNotionId]  = useState(c.notion_target_id);
+  const [obsidian,  setObsidian]  = useState(c.obsidian_vault_name);
+  const si = storageInfo.value;
+
+  // Reset draft when drawer opens
+  useEffect(() => {
+    if (!open) return;
+    const c = cfg.value;
+    setLang(c.language); setVadOn(c.vad_enabled); setThresh(c.vad_threshold);
+    setPad(c.vad_padding_ms); setSilGap(c.vad_min_silence_ms); setAutoSave(c.auto_save);
+    setDelAfter(c.delete_after_transcription); setNotionKey(c.notion_api_key);
+    setNotionId(c.notion_target_id); setObsidian(c.obsidian_vault_name);
+  }, [open]);
+
+  const save = () => {
+    const prevDelete = cfg.value.delete_after_transcription;
+    const newCfg = {
+      language: lang,
+      vad_enabled:                vadOn,
+      vad_threshold:              parseFloat(thresh)  || DEFAULTS.vad_threshold,
+      vad_padding_ms:             parseInt(pad)       || DEFAULTS.vad_padding_ms,
+      vad_min_silence_ms:         parseInt(silGap)    || DEFAULTS.vad_min_silence_ms,
+      auto_save:                  autoSave,
+      delete_after_transcription: delAfter,
+      notion_api_key:             notionKey,
+      notion_target_id:           notionId,
+      obsidian_vault_name:        obsidian,
+    };
+    if (!prevDelete && delAfter) {
+      alert('Delete after transcription enabled.\n\nSource WAV files will be permanently deleted from your DJI drive after each successful transcription. Ensure the drive is not your only copy of these recordings.');
+    }
+    cfg.value = newCfg;
+    localStorage.setItem('tj_cfg', JSON.stringify(newCfg));
+    settingsOpen.value = false;
+  };
+
+  if (!open) return null;
+  return html`
+    <div class="overlay open" onClick=${e => { if (e.target === e.currentTarget) settingsOpen.value = false; }}>
+      <div class="drawer">
+        <div class="drawer-handle"></div>
+        <div class="drawer-head">
+          <h2>Settings</h2>
+          <button class="icon-btn" aria-label="Close settings" onClick=${() => settingsOpen.value = false}><${IconX} /></button>
+        </div>
+
+        <div class="section-label">Transcription</div>
+        <div class="field">
+          <label>Language</label>
+          <input type="text" placeholder="en" maxlength="10" value=${lang} onInput=${e => setLang(e.target.value)} />
+          <span class="hint">ISO 639-1 code (en, sv, fr…). Leave blank to auto-detect.</span>
+        </div>
+
+        <div class="section-label">Silence Removal (VAD)</div>
+        <div class="field check-row">
+          <input type="checkbox" checked=${vadOn} onChange=${e => setVadOn(e.target.checked)} />
+          <label>Remove silent sections before transcription</label>
+        </div>
+        <div style=${'opacity:' + (vadOn ? '1' : '.4')}>
+          <div class="field" style="margin-top:.6rem">
+            <label>RMS Threshold</label>
+            <input type="number" step="0.001" min="0" max="1" placeholder="0.01" disabled=${!vadOn} value=${thresh} onInput=${e => setThresh(e.target.value)} />
+            <span class="hint">Energy below this level is treated as silence</span>
+          </div>
+          <div class="field" style="margin-top:.6rem">
+            <label>Padding (ms)</label>
+            <input type="number" step="10" min="0" placeholder="200" disabled=${!vadOn} value=${pad} onInput=${e => setPad(e.target.value)} />
+            <span class="hint">Audio retained around voiced regions</span>
+          </div>
+          <div class="field" style="margin-top:.6rem">
+            <label>Min silence gap (ms)</label>
+            <input type="number" step="10" min="0" placeholder="300" disabled=${!vadOn} value=${silGap} onInput=${e => setSilGap(e.target.value)} />
+            <span class="hint">Minimum gap before it is removed</span>
+          </div>
+        </div>
+
+        <div class="section-label">Storage</div>
+        <div class="field check-row">
+          <input type="checkbox" checked=${autoSave} onChange=${e => setAutoSave(e.target.checked)} />
+          <label>Auto-save transcriptions to history</label>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.4rem">
+          <div class="storage-bar"><div class=${'storage-fill' + (si.warn ? ' warn' : '')} style=${'width:' + si.pct + '%'}></div></div>
+          <div class="storage-info">${si.text}</div>
+          <button class="btn btn-danger btn-sm" style="align-self:flex-start" onClick=${clearHistory}>Clear History</button>
+        </div>
+
+        <div class="section-label">Drive</div>
+        <div class="field check-row">
+          <input type="checkbox" checked=${delAfter} onChange=${e => setDelAfter(e.target.checked)} />
+          <label>Delete source files after transcription</label>
+        </div>
+        <p class="hint">Files are deleted per-file immediately after transcription succeeds and is saved to history. You will be asked to confirm before each batch.</p>
+
+        <div class="section-label">Connectors — Notion</div>
+        <div class="field">
+          <label>Integration Token</label>
+          <input type="password" placeholder="secret_…" value=${notionKey} onInput=${e => setNotionKey(e.target.value)} />
+        </div>
+        <div class="field">
+          <label>Target Page or Database ID</label>
+          <input type="text" placeholder="32-character ID" value=${notionId} onInput=${e => setNotionId(e.target.value)} />
+        </div>
+
+        <div class="section-label">Connectors — Obsidian</div>
+        <div class="field">
+          <label>Vault Name</label>
+          <input type="text" placeholder="My Vault" value=${obsidian} onInput=${e => setObsidian(e.target.value)} />
+          <span class="hint">Opens a new note via obsidian:// URI. Obsidian must be running locally.</span>
+        </div>
+
+        <div class="section-label">Connectors — Coming Soon</div>
+        <p class="hint" style="padding-bottom:.25rem">Claude · ChatGPT · Custom Webhook</p>
+
+        <button class="btn btn-primary" onClick=${save}>Save Settings</button>
+      </div>
+    </div>`;
+}
+
+function App() {
+  useEffect(() => {
+    checkModelStatus();
+    refreshHistory();
+    refreshStorage();
+  }, []);
+
+  return html`
+    <div id="app" style="display:flex;flex-direction:column">
+      <${SettingsDrawer} />
+      <${Header} />
+      <main>
+        <${ModelPanel} />
+        ${webgpuNoticeVis.value && html`
+          <div class="notice warn inline-notice">
+            <span>WebGPU not available — using WASM mode (~650 MB). Transcription will work but may be slower than with a GPU.</span>
+          </div>
+        `}
+        <${FilesPanel} />
+        <${HistoryPanel} />
+      </main>
+      <${ActionBar} />
+    </div>`;
+}
+
+function CompatWarning() {
+  return html`
+    <div id="compat-warning" style="display:flex">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--yellow)">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <h1>Chromium-based browser required</h1>
+      <p>This app uses the File System Access API, which is only supported in Chrome, Edge, and Brave. Please open this page in one of those browsers.</p>
+    </div>`;
+}
+
+render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
 </script>
 </body>
 </html>
