@@ -114,16 +114,8 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 
 ---
 
-### US-09 — Selective transcription
-**As a** field recorder with a mix of old and new recordings,
-**I want to** deselect individual files before starting a batch,
-**so that** I only transcribe the recordings I need.
-
-**Acceptance criteria:**
-- Each file has a checkbox, checked by default
-- "Select All" in the action bar selects or deselects all files
-- The action bar shows a count of selected files
-- Only checked files are included in the transcription batch
+### US-09 — Selective transcription *(superseded by Epic 13 wizard flow)*
+**Superseded note:** In the wizard flow (Epic 13+) all files in the selected folder are processed sequentially. Per-file selection checkboxes have been removed. Files already present in transcription history are skipped automatically.
 
 ---
 
@@ -375,30 +367,30 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 
 ## Epic 11 — Notes & In-Card Actions
 
-### US-29 — Horizontal action buttons
-**As a** field recorder reviewing a transcription card,
-**I want** the action buttons to appear in a single horizontal row below the transcript,
-**so that** they are compact, scannable, and easy to tap.
+### US-29 — Card action buttons
+**As an** audio journaller reviewing a transcription card,
+**I want** a minimal set of action buttons below the transcript,
+**so that** the card stays focused on content rather than controls.
 
 **Acceptance criteria:**
-- Copy, Share (when available), Notion/Obsidian (when configured), Notes, and Delete buttons are in a horizontal flex row
-- Buttons wrap to a new line if the viewport is too narrow
+- Notion and Obsidian connector buttons are shown when configured in settings
+- A Delete button is present to remove the transcription
+- Copy and Share buttons are not shown (removed as clutter in the wizard flow)
+- Buttons are in a horizontal flex row and wrap on narrow viewports
 
 ---
 
-### US-30 — Notes: add, save, and view
-**As a** field recorder who wants to annotate a transcription,
-**I want** to open a notes area, type a note, save it, and see it in a clean read-only view,
-**so that** my annotations are clearly distinguished from the transcript text.
+### US-30 — Notes: always-visible auto-save textarea
+**As an** audio journaller who wants to annotate a transcription,
+**I want** a notes field that is always visible below the transcript and saves automatically as I type,
+**so that** I can write notes without any save/toggle ceremony.
 
 **Acceptance criteria:**
-- Clicking the Notes button on a transcription card opens a notes section below
-- If no notes exist: the section opens in edit mode (textarea visible, Save and Transcribe buttons shown)
-- If notes already exist: the section opens in read-only view (note text visible, Edit button shown)
-- Clicking Save persists the note to `localStorage` and switches to read-only view
-- Clicking Edit returns to the textarea with the existing text preserved
-- Notes persist across sessions alongside the transcription entry in `localStorage`
-- If a file already has saved notes when the card is rendered, the notes section is shown automatically in read-only view
+- A notes textarea is shown below the transcript on every card that has a completed transcription
+- No Notes button, no Save button, no read-only toggle — just a textarea
+- Notes are auto-saved to `localStorage` 800 ms after the user stops typing (debounce)
+- Existing notes are pre-populated when the card renders
+- A microphone button beneath the textarea allows voice-to-notes (see US-31)
 
 ---
 
@@ -503,40 +495,41 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 
 ## Epic 14 — ATF Entries (Action / Thought / Feeling)
 
-### US-38 — Add an Action entry to a recording
+### US-38 — Add ATF entries via unified input and type selector
 **As an** audio journaller reviewing a transcription,
-**I want** to capture a specific action that emerged from this recording,
-**so that** I have a clear to-do linked to the context of what I said.
+**I want** a single text input with a type dropdown to add Action, Thought, or Feeling entries,
+**so that** the interface is compact and I can quickly add any type without hunting for separate inputs.
 
 **Acceptance criteria:**
-- An "Add Action" button (or similar affordance) is visible in the ATF section of each card
-- Tapping it opens a single-line text input with a 160-character limit and a character counter
-- Pressing Save adds the entry to the card and persists it to `localStorage`
-- Multiple Action entries can be added to the same card
+- A single input row is shown: `[Type dropdown] [Text input ≤160 chars] [Add]`
+- The type dropdown contains three options: Action, Thought, Feeling
+- On first render and after each Add, the dropdown randomises to one of the three types to avoid implying priority
+- Pressing Enter or clicking Add commits the entry; the input clears
+- A character counter appears when the draft is within 30 characters of the limit
+- Existing entries are shown above the input row, grouped by type with coloured labels
+- Each entry has a × delete button
 
 ---
 
-### US-39 — Add a Thought entry to a recording
-**As an** audio journaller reviewing a transcription,
-**I want** to capture a key thought or insight that emerged from this recording,
-**so that** I can crystallise the cognitive content of what I said.
+### US-39 — Multiple ATF entries per type
+**As an** audio journaller,
+**I want** to add as many entries of each type as I like,
+**so that** I am not limited to one action, one thought, or one feeling per recording.
 
 **Acceptance criteria:**
-- Same affordance as Action entries but typed as `thought`
-- 160-character limit with counter
-- Multiple Thought entries per card
+- There is no maximum on the number of entries per type per recording
+- All entries of a given type appear grouped together above the input row
 
 ---
 
-### US-40 — Add a Feeling entry to a recording
-**As an** audio journaller reviewing a transcription,
-**I want** to capture the emotional state present in or evoked by this recording,
-**so that** I can track my emotional patterns over time.
+### US-40 — Character limit on ATF entries
+**As an** audio journaller,
+**I want** each ATF entry to be capped at 160 characters,
+**so that** entries stay concise and scannable in the session summary.
 
 **Acceptance criteria:**
-- Same affordance as Action and Thought but typed as `feeling`
-- 160-character limit with counter
-- Multiple Feeling entries per card
+- The text input has `maxlength="160"`
+- A counter ("N left") appears when fewer than 30 characters remain
 
 ---
 
@@ -588,6 +581,37 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 - A clear confirmation dialog explains this is irreversible
 - Only files for which transcription succeeded are eligible for deletion
 - The button is absent if the folder was opened in read-only mode
+
+---
+
+## Epic 16 — Home Screen & Folder Reconnection
+
+### US-46 — Workflow overview on home screen
+**As a** first-time or returning audio journaller on the home screen,
+**I want** to see a concise step-by-step explanation of the journaling flow,
+**so that** I understand how the app works before selecting a folder.
+
+**Acceptance criteria:**
+- Three numbered steps are shown in the folder selection panel when no folder is active:
+  1. Select a folder of recordings
+  2. Review each recording one at a time — transcription runs in the background
+  3. Add actions, thoughts, and feelings — then see your session summary
+- The steps are replaced by the folder's file list once a folder is selected
+- Steps are visually distinct but not distracting
+
+---
+
+### US-47 — Auto-reconnect to last folder
+**As a** returning audio journaller who uses the same recordings folder each session,
+**I want** the app to automatically re-scan my last folder on load if permission is still active,
+**so that** I can pick up where I left off without having to re-select the folder.
+
+**Acceptance criteria:**
+- After a successful folder selection, the `FileSystemDirectoryHandle` is persisted to IndexedDB
+- On subsequent app loads, the stored handle is retrieved and `queryPermission({ mode: 'readwrite' })` is called
+- If the permission state is `'granted'`, the folder is scanned automatically and the wizard is shown
+- If the permission is not granted (e.g. browser has expired it), the home screen is shown with no error
+- Auto-reconnect is silent — no prompt, no banner, just the wizard appearing as if the folder was just selected
 
 ---
 

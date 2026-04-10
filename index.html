@@ -294,7 +294,24 @@
       font-family: inherit; color: var(--text);
     }
     .atf-input:focus { outline: none; border-color: var(--accent); }
+    .atf-type-select {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.5rem 0.6rem; font-size: 0.8rem;
+      font-family: inherit; color: var(--text); cursor: pointer; flex-shrink: 0;
+    }
+    .atf-type-select:focus { outline: none; border-color: var(--accent); }
     .atf-counter { font-size: 0.72rem; color: var(--muted); text-align: right; }
+
+    /* ── Workflow steps ───────────────────────────────────────────────────────── */
+    .workflow-steps { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; }
+    .workflow-step  { display: flex; align-items: flex-start; gap: 0.875rem; }
+    .workflow-step-num {
+      width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+      background: var(--accent); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.72rem; font-weight: 700; margin-top: 1px;
+    }
+    .workflow-step-text { font-size: 0.875rem; color: var(--muted); line-height: 1.5; }
 
     .error-msg {
       font-size: 0.8rem; color: var(--red);
@@ -535,6 +552,10 @@ async function checkModelStatus() {
     try {
       await loadParakeet();
       modelStatus.value = { dot: 'cached', label: 'Model ready' };
+      // If auto-reconnect already populated files, kick off auto-transcribe now
+      if (cfg.value.auto_transcribe && !busy.value && files.value.some(f => f.status === 'pending')) {
+        startBatch();
+      }
     } catch {
       localStorage.removeItem('parakeet_model_ready');
       modelStatus.value   = { dot: 'missing', label: 'Model not downloaded' };
@@ -624,6 +645,67 @@ function removeSilence(float32, sampleRate) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// FOLDER HANDLE PERSISTENCE (IndexedDB)
+// Stores the last-used FileSystemDirectoryHandle so we can auto-reconnect.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HANDLE_DB    = 'tj-fs-handles';
+const HANDLE_STORE = 'handles';
+const HANDLE_KEY   = 'last-dir';
+
+function openHandleDb() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(HANDLE_DB, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(HANDLE_STORE);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+
+async function saveHandle(handle) {
+  try {
+    const db = await openHandleDb();
+    const tx = db.transaction(HANDLE_STORE, 'readwrite');
+    tx.objectStore(HANDLE_STORE).put(handle, HANDLE_KEY);
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  } catch (e) { console.warn('Could not save folder handle:', e); }
+}
+
+async function loadHandle() {
+  try {
+    const db = await openHandleDb();
+    const tx = db.transaction(HANDLE_STORE, 'readonly');
+    return await new Promise((res, rej) => {
+      const req = tx.objectStore(HANDLE_STORE).get(HANDLE_KEY);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror   = () => rej(req.error);
+    });
+  } catch { return null; }
+}
+
+async function tryAutoReconnect() {
+  const handle = await loadHandle();
+  if (!handle) return;
+  try {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') return;
+    const found = [];
+    await scan(handle, '', found);
+    found.sort((a, b) => a.path.localeCompare(b.path));
+    if (!found.length) return;
+    batch(() => {
+      dirHandle.value   = handle;
+      files.value       = found;
+      wizardIndex.value = 0;
+      appView.value     = 'wizard';
+    });
+    if (cfg.value.auto_transcribe && parakeetModel && found.some(f => f.status === 'pending')) {
+      startBatch();
+    }
+  } catch (e) { console.warn('Auto-reconnect failed:', e); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // DRIVE PICKER
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -643,8 +725,8 @@ async function pickDrive() {
       wizardIndex.value = 0;
       appView.value     = found.length ? 'wizard' : 'home';
     });
-    // Auto-transcribe: start if setting enabled, model loaded, pending files exist
-    if (found.length && cfg.value.auto_transcribe && parakeetModel && found.some(f => f.selected && f.status === 'pending')) {
+    await saveHandle(handle);
+    if (found.length && cfg.value.auto_transcribe && parakeetModel && found.some(f => f.status === 'pending')) {
       if (cfg.value.delete_after_transcription) deleteBannerVis.value = true;
       else startBatch();
     }
@@ -872,9 +954,11 @@ function saveFileEntries(i, entries) {
   if (id) updateTx(id, { entries });
 }
 
-function AtfGroup({ type, label, placeholder, fileEntries, fileIndex }) {
+const randomAtfType = () => ATF_TYPES[Math.floor(Math.random() * ATF_TYPES.length)].type;
+
+function AtfInput({ fileEntries, fileIndex }) {
   const [draft, setDraft] = useState('');
-  const items = fileEntries.filter(e => e.type === type);
+  const [type,  setType]  = useState(randomAtfType);
 
   const add = () => {
     const text = draft.trim();
@@ -882,24 +966,33 @@ function AtfGroup({ type, label, placeholder, fileEntries, fileIndex }) {
     const entry = { id: genId(), type, text, createdAt: new Date().toISOString() };
     saveFileEntries(fileIndex, [...fileEntries, entry]);
     setDraft('');
+    setType(randomAtfType());
   };
 
-  const remove = id => {
-    saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
-  };
-
-  const onKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
+  const remove = id => saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
+  const onKey  = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
+  const placeholder = ATF_TYPES.find(a => a.type === type)?.placeholder || '';
 
   return html`
-    <div class="atf-group">
-      <div class=${'atf-label ' + type}>${label}</div>
-      ${items.map(e => html`
-        <div class="atf-chip" key=${e.id}>
-          <span>${e.text}</span>
-          <button onClick=${() => remove(e.id)} title="Remove" aria-label="Remove entry">×</button>
-        </div>
-      `)}
+    <div class="atf-section">
+      ${ATF_TYPES.map(({ type: t, label }) => {
+        const items = fileEntries.filter(e => e.type === t);
+        if (!items.length) return null;
+        return html`
+          <div class="atf-group" key=${t}>
+            <div class=${'atf-label ' + t}>${label}</div>
+            ${items.map(e => html`
+              <div class="atf-chip" key=${e.id}>
+                <span>${e.text}</span>
+                <button onClick=${() => remove(e.id)} title="Remove" aria-label="Remove entry">×</button>
+              </div>
+            `)}
+          </div>`;
+      })}
       <div class="atf-add-row">
+        <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
+          ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
+        </select>
         <input class="atf-input" type="text" placeholder=${placeholder}
           maxlength=${ATF_MAX} value=${draft}
           onInput=${e => setDraft(e.target.value)}
@@ -919,17 +1012,15 @@ const BADGE_MAP = {
 };
 
 function FileItem({ f, i }) {
-  const [notesOpen,  setNotesOpen]  = useState(!!f.notes);
-  const [notesSaved, setNotesSaved] = useState(!!f.notes);
   const [notesDraft, setNotesDraft] = useState(f.notes || '');
   const [recording,  setRecording]  = useState(false);
   const [micBusy,    setMicBusy]    = useState(false);
-  const mediaRecRef = useRef(null);
-  const chunksRef   = useRef([]);
+  const mediaRecRef   = useRef(null);
+  const chunksRef     = useRef([]);
+  const notesTimerRef = useRef(null);
 
   const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
   const inProgress = f.status === 'converting' || f.status === 'transcribing';
-  const isBusy     = busy.value;
   const c          = cfg.value;
 
   const persistNotes = text => {
@@ -937,19 +1028,15 @@ function FileItem({ f, i }) {
     if (f.savedId) updateTx(f.savedId, { notes: text });
   };
 
-  const handleSave = () => { persistNotes(notesDraft); setNotesSaved(true); };
-
-  const toggleNotes = () => {
-    if (!notesOpen) { setNotesSaved(!!notesDraft); setNotesOpen(true); }
-    else setNotesOpen(false);
+  const onNotesChange = e => {
+    const text = e.target.value;
+    setNotesDraft(text);
+    clearTimeout(notesTimerRef.current);
+    notesTimerRef.current = setTimeout(() => persistNotes(text), 800);
   };
 
   const toggleRecording = async () => {
-    if (recording) {
-      mediaRecRef.current?.stop();
-      setRecording(false);
-      return;
-    }
+    if (recording) { mediaRecRef.current?.stop(); setRecording(false); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
@@ -959,10 +1046,9 @@ function FileItem({ f, i }) {
         stream.getTracks().forEach(t => t.stop());
         setMicBusy(true);
         try {
-          const blob  = new Blob(chunksRef.current, { type: mr.mimeType });
-          const ab    = await blob.arrayBuffer();
-          const f32   = await prepareAudio(ab);
-          const text  = await runParakeet(f32);
+          const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+          const f32  = await prepareAudio(await blob.arrayBuffer());
+          const text = await runParakeet(f32);
           if (text?.trim()) {
             const next = notesDraft ? `${notesDraft} ${text.trim()}` : text.trim();
             setNotesDraft(next);
@@ -971,9 +1057,7 @@ function FileItem({ f, i }) {
         } catch (e) { console.error('Mic transcription failed:', e); }
         setMicBusy(false);
       };
-      mr.start();
-      mediaRecRef.current = mr;
-      setRecording(true);
+      mr.start(); mediaRecRef.current = mr; setRecording(true);
     } catch (e) { console.error('Mic access denied:', e); }
   };
 
@@ -984,7 +1068,7 @@ function FileItem({ f, i }) {
       files.value = files.value.filter((_, idx) => idx !== i);
     } else {
       updateFile(i, { transcript: null, status: 'pending', savedId: null, notes: '' });
-      setNotesDraft(''); setNotesOpen(false);
+      setNotesDraft('');
     }
     refreshHistory(); refreshStorage();
   };
@@ -992,8 +1076,6 @@ function FileItem({ f, i }) {
   return html`
     <div class="file-item">
       <div class="file-row">
-        <input type="checkbox" class="file-check" checked=${f.selected} disabled=${isBusy}
-          onChange=${e => updateFile(i, { selected: e.target.checked })} />
         <div class="file-info">
           <div class="file-header">
             <div class="card-title">${fmtCardTitle(f.mtime)}</div>
@@ -1007,43 +1089,24 @@ function FileItem({ f, i }) {
       ${f.transcript !== null && html`
         <div class="transcript">${f.transcript}</div>
         <div class="tx-actions">
-          <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(f.transcript)}>Copy</button>
-          ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${() => shareOne(i)}>Share</button>`}
           ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
           ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
-          <button class="btn btn-ghost btn-sm" onClick=${toggleNotes}>Notes</button>
           <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
         </div>
-      `}
-      ${notesOpen && (notesSaved ? html`
-        <div class="notes-view">${notesDraft}</div>
-        <div class="notes-footer">
-          <button class="btn btn-ghost btn-sm" onClick=${() => setNotesSaved(false)}>Edit</button>
-        </div>
-      ` : html`
-        <textarea class="notes-area" placeholder="Add notes…" rows="3"
-          value=${notesDraft}
-          onInput=${e => setNotesDraft(e.target.value)}
+        <textarea class="notes-area" placeholder="Notes…" rows="3"
+          value=${notesDraft} onInput=${onNotesChange}
         ></textarea>
         <div class="notes-footer">
-          <button class="btn btn-primary btn-sm" onClick=${handleSave}>Save</button>
           <button class="btn btn-ghost btn-sm" data-mic
             disabled=${!parakeetModel || micBusy}
-            title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Record a voice note'}
+            title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Speak a note'}
             onClick=${toggleRecording}>
-            ${micBusy ? html`Transcribing…` : recording
+            ${micBusy ? 'Transcribing…' : recording
               ? html`<${IconMicActive} /> Stop`
-              : html`<${IconMic} /> Transcribe`}
+              : html`<${IconMic} />`}
           </button>
         </div>
-      `)}
-      ${f.transcript !== null && html`
-        <div class="atf-section">
-          ${ATF_TYPES.map(({ type, label, placeholder }) => html`
-            <${AtfGroup} key=${type} type=${type} label=${label} placeholder=${placeholder}
-              fileEntries=${f.entries || []} fileIndex=${i} />
-          `)}
-        </div>
+        <${AtfInput} fileEntries=${f.entries || []} fileIndex=${i} />
       `}
       ${f.error && html`
         <div class="error-msg">
@@ -1055,39 +1118,30 @@ function FileItem({ f, i }) {
 }
 
 function FilesPanel() {
-  const fs = files.value;
-  const dh = dirHandle.value;
-  const selCount = fs.filter(f => f.selected).length;
-  const selSize  = fs.filter(f => f.selected).reduce((a, f) => a + f.size, 0);
-  const totSize  = fs.reduce((a, f) => a + f.size, 0);
-  const meta = dh && fs.length
-    ? `${dh.name} — ${fs.length} file${fs.length !== 1 ? 's' : ''}, ${fmtBytes(totSize)} · ${selCount} selected · ${fmtDur(selSize)}`
-    : dh ? `${dh.name} — 0 files` : 'No drive selected';
   return html`
     <div class="panel">
       <div class="panel-head">
         <div>
-          <div class="panel-title">Recordings</div>
-          <div class="panel-meta">${meta}</div>
+          <div class="panel-title">Start a session</div>
+          <div class="panel-meta">Select a folder of recordings to begin</div>
         </div>
-        <button class="btn btn-ghost" onClick=${pickDrive}>
+        <button class="btn btn-primary" onClick=${pickDrive}>
           <${IconFolder} /> Select Folder
         </button>
       </div>
-      ${deleteBannerVis.value && html`
-        <div class="notice danger">
-          <span>Source audio files will be deleted from the selected folder after each successful transcription. This cannot be undone.</span>
-          <button class="btn btn-ghost btn-sm" onClick=${() => { deleteBannerVis.value = false; startBatch(); }}>Proceed</button>
-          <button class="btn btn-ghost btn-sm" onClick=${() => { deleteBannerVis.value = false; }}>Cancel</button>
+      <div class="workflow-steps">
+        <div class="workflow-step">
+          <div class="workflow-step-num">1</div>
+          <div class="workflow-step-text">Select a folder containing your recordings — any audio format works</div>
         </div>
-      `}
-      <div>
-        ${fs.length === 0 ? html`
-          <div class="empty">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-            ${dh ? 'No audio files found in this folder' : 'Select a folder to list recordings'}
-          </div>
-        ` : fs.map((f, i) => html`<${FileItem} key=${f.path} f=${f} i=${i} />`)}
+        <div class="workflow-step">
+          <div class="workflow-step-num">2</div>
+          <div class="workflow-step-text">Review each recording one at a time while transcription runs in the background</div>
+        </div>
+        <div class="workflow-step">
+          <div class="workflow-step-num">3</div>
+          <div class="workflow-step-text">Add notes, actions, thoughts, and feelings to each entry, then finish to see your session summary</div>
+        </div>
       </div>
     </div>`;
 }
@@ -1431,6 +1485,7 @@ function App() {
     checkModelStatus();
     refreshHistory();
     refreshStorage();
+    tryAutoReconnect();
   }, []);
 
   const view = appView.value;
