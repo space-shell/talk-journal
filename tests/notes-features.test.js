@@ -112,17 +112,16 @@
     cleanup();
   });
 
-  await test('US-30: Notes button opens read-only view when notes already exist', async () => {
+  await test('US-30: card with saved notes auto-shows read-only view without clicking Notes', async () => {
+    // Notes auto-open on render when notes exist — no click required
     injectFile({ notes: 'Pre-existing note text' });
     await sleep(60);
-    findBtn('Notes').click();
-    await sleep(60);
     const view = document.querySelector('.notes-view');
-    assert(view, '.notes-view element not found for pre-existing notes');
+    assert(view, '.notes-view not auto-shown for card with saved notes');
     assert(view.textContent.includes('Pre-existing note text'),
       'Notes view does not display the saved note text');
-    const ta = document.querySelector('.notes-area');
-    assert(!ta, 'Textarea should not be visible when notes already exist');
+    assert(!document.querySelector('.notes-area'),
+      'Textarea should not be visible when notes already exist');
     cleanup();
   });
 
