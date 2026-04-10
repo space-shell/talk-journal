@@ -226,8 +226,8 @@
       border-radius: 100px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
     }
     .badge-pending     { background: var(--surface2); color: var(--muted); }
-    .badge-converting  { background: rgba(37,99,235,.1); color: var(--accent); }
-    .badge-transcribing{ background: rgba(37,99,235,.1); color: var(--accent); }
+    .badge-converting  { background: rgba(37,99,235,.1); color: var(--accent); animation: pulse-btn 1s ease-in-out infinite; }
+    .badge-transcribing{ background: rgba(37,99,235,.1); color: var(--accent); animation: pulse-btn 1s ease-in-out infinite; }
     .badge-done        { background: rgba(5,150,105,.1); color: var(--green); }
     .badge-error       { background: rgba(220,38,38,.1); color: var(--red); }
     .badge-deleted     { background: var(--surface2); color: var(--muted); }
@@ -242,6 +242,8 @@
       50%  { transform: translateX(60%)  scaleX(.8); }
       100% { transform: translateX(200%) scaleX(.4); }
     }
+    @keyframes pulse-btn { 0%,100%{ opacity:1 } 50%{ opacity:.45 } }
+    .btn-pulsing { animation: pulse-btn 1.2s ease-in-out infinite; }
 
     .transcript {
       background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
@@ -345,6 +347,7 @@ const DEFAULTS = {
   vad_min_silence_ms: 300,
   delete_after_transcription: false,
   auto_save: true,
+  auto_transcribe: true,
   notion_api_key: '',
   notion_target_id: '',
   obsidian_vault_name: '',
@@ -564,6 +567,11 @@ async function pickDrive() {
     await scan(handle, '', found);
     found.sort((a, b) => a.path.localeCompare(b.path));
     batch(() => { dirHandle.value = handle; files.value = found; });
+    // Auto-transcribe: start immediately if setting enabled, model loaded, and there are pending files
+    if (cfg.value.auto_transcribe && parakeetModel && found.some(f => f.selected && f.status === 'pending')) {
+      if (cfg.value.delete_after_transcription) deleteBannerVis.value = true;
+      else startBatch();
+    }
   } catch (e) {
     if (e.name !== 'AbortError') console.error(e);
   }
@@ -755,8 +763,8 @@ const BADGE_MAP = {
 };
 
 function FileItem({ f, i }) {
-  const [notesOpen,  setNotesOpen]  = useState(false);
-  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesOpen,  setNotesOpen]  = useState(!!f.notes);
+  const [notesSaved, setNotesSaved] = useState(!!f.notes);
   const [notesDraft, setNotesDraft] = useState(f.notes || '');
   const [recording,  setRecording]  = useState(false);
   const [micBusy,    setMicBusy]    = useState(false);
@@ -989,7 +997,7 @@ function ActionBar() {
         onClick=${() => { files.value = fs.map(f => ({ ...f, selected: !allSelected })); }}>
         ${allSelected ? 'Deselect all' : 'Select all'}
       </button>
-      <button class="btn btn-primary" disabled=${isBusy || !fs.some(f => f.selected)} onClick=${requestBatch}>
+      <button class=${'btn btn-primary' + (isBusy ? ' btn-pulsing' : '')} disabled=${isBusy || !fs.some(f => f.selected)} onClick=${requestBatch}>
         <${IconPlay} /> Transcribe Selected
       </button>
       <button class="btn btn-ghost" disabled=${!hasDone} onClick=${() => exportAll('txt')}>.txt</button>
@@ -1008,6 +1016,7 @@ function SettingsDrawer() {
   const [pad,       setPad]       = useState(c.vad_padding_ms);
   const [silGap,    setSilGap]    = useState(c.vad_min_silence_ms);
   const [autoSave,  setAutoSave]  = useState(c.auto_save);
+  const [autoTx,    setAutoTx]    = useState(c.auto_transcribe);
   const [delAfter,  setDelAfter]  = useState(c.delete_after_transcription);
   const [notionKey, setNotionKey] = useState(c.notion_api_key);
   const [notionId,  setNotionId]  = useState(c.notion_target_id);
@@ -1020,7 +1029,7 @@ function SettingsDrawer() {
     const c = cfg.value;
     setLang(c.language); setVadOn(c.vad_enabled); setThresh(c.vad_threshold);
     setPad(c.vad_padding_ms); setSilGap(c.vad_min_silence_ms); setAutoSave(c.auto_save);
-    setDelAfter(c.delete_after_transcription); setNotionKey(c.notion_api_key);
+    setAutoTx(c.auto_transcribe); setDelAfter(c.delete_after_transcription); setNotionKey(c.notion_api_key);
     setNotionId(c.notion_target_id); setObsidian(c.obsidian_vault_name);
   }, [open]);
 
@@ -1033,6 +1042,7 @@ function SettingsDrawer() {
       vad_padding_ms:             parseInt(pad)       || DEFAULTS.vad_padding_ms,
       vad_min_silence_ms:         parseInt(silGap)    || DEFAULTS.vad_min_silence_ms,
       auto_save:                  autoSave,
+      auto_transcribe:            autoTx,
       delete_after_transcription: delAfter,
       notion_api_key:             notionKey,
       notion_target_id:           notionId,
@@ -1057,6 +1067,10 @@ function SettingsDrawer() {
         </div>
 
         <div class="section-label">Transcription</div>
+        <div class="field check-row">
+          <input type="checkbox" checked=${autoTx} onChange=${e => setAutoTx(e.target.checked)} />
+          <label>Auto-transcribe on drive selection</label>
+        </div>
         <div class="field">
           <label>Language</label>
           <input type="text" placeholder="en" maxlength="10" value=${lang} onInput=${e => setLang(e.target.value)} />

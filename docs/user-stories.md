@@ -396,6 +396,7 @@ The primary persona is a **field recorder** — someone who uses a DJI Mic 2 tra
 - Clicking Save persists the note to `localStorage` and switches to read-only view
 - Clicking Edit returns to the textarea with the existing text preserved
 - Notes persist across sessions alongside the transcription entry in `localStorage`
+- If a file already has saved notes when the card is rendered, the notes section is shown automatically in read-only view
 
 ---
 
@@ -411,3 +412,29 @@ The primary persona is a **field recorder** — someone who uses a DJI Mic 2 tra
 - If the parakeet model is not loaded, the Transcribe button is disabled
 - If microphone access is denied, no crash occurs (error logged to console)
 - While transcription is in progress the button shows "Transcribing…" and is disabled
+
+---
+
+### US-32 — Auto-transcribe on drive selection
+**As a** field recorder who plugs in their DJI Mic 2,
+**I want** untranscribed recordings to begin processing automatically after I select the drive,
+**so that** I don't need to manually click Transcribe each session.
+
+**Acceptance criteria:**
+- An "Auto-transcribe on drive selection" toggle in Settings, enabled by default
+- When enabled and the model is loaded, transcription starts automatically after the drive picker closes
+- Only selected, untranscribed files are processed (same rules as a manual batch)
+- If delete-after-transcription is enabled, the confirmation banner is shown before the batch starts (same as manual)
+- If the model is not yet loaded, auto-transcribe does not start and the user must trigger manually
+- The setting persists across sessions via `localStorage`
+
+---
+
+### US-33 — Pulsing progress feedback during transcription
+**As a** field recorder monitoring a running batch,
+**I want** active UI elements to pulse visually during transcription,
+**so that** I can tell at a glance that work is ongoing without watching a status text.
+
+**Acceptance criteria:**
+- The Transcribe Selected button in the action bar pulses with a breathing opacity animation while a batch is running
+- Per-file status badges pulse while that specific file is being converted or transcribed
