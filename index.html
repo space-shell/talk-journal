@@ -1470,7 +1470,7 @@ function CompatWarning() {
 }
 
 // Test hooks — used by tests/notes-features.test.js
-window._tj = { files, cfg, busy, historyEntries, get parakeetModel() { return parakeetModel; }, set parakeetModel(v) { parakeetModel = v; } };
+window._tj = { files, cfg, busy, historyEntries, appView, wizardIndex, get parakeetModel() { return parakeetModel; }, set parakeetModel(v) { parakeetModel = v; } };
 
 render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
 </script>
