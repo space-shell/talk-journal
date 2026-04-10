@@ -517,23 +517,149 @@ async function clearHistory() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const MODEL_KEY = 'parakeet-tdt-0.6b-v3';
-let parakeetModel = null;
+let parakeetModel = null;   // truthy when ready: true (worker mode) or model object (fallback)
+
+// ── TRANSCRIPTION QUEUE ────────────────────────────────────────────────────
+// All parakeet.js inference is serialised through a single queue so only one
+// transcription runs at a time, keeping CPU/GPU usage bounded. Mic-triggered
+// jobs (notes and ATF entries) set priority=true so they are inserted next in
+// line rather than appended — they run as soon as the current job finishes.
+
+const txQueue   = [];
+let   txRunning = false;
+
+function runQueued(fn, priority = false) {
+  return new Promise((resolve, reject) => {
+    const job = { fn, resolve, reject };
+    if (priority) txQueue.unshift(job);
+    else          txQueue.push(job);
+    drainTxQueue();
+  });
+}
+
+async function drainTxQueue() {
+  if (txRunning || !txQueue.length) return;
+  txRunning = true;
+  const { fn, resolve, reject } = txQueue.shift();
+  try   { resolve(await fn()); }
+  catch (e) { reject(e); }
+  finally   { txRunning = false; drainTxQueue(); }
+}
+
+// ── PARAKEET WORKER ────────────────────────────────────────────────────────
+// parakeet.js is loaded inside a dedicated Web Worker so model inference runs
+// off the main thread — keeping the UI responsive during long transcriptions.
+// Audio data is transferred to the worker via ArrayBuffer transfer (zero-copy).
+// If the Worker fails to initialise (e.g. library uses window APIs in an
+// incompatible way), execution falls back transparently to the main thread.
+// Note: SharedArrayBuffer is NOT required — only transferable ArrayBuffers.
+
+let parakeetWorker   = null;
+let workerJobSeq     = 0;
+const workerPending  = {};    // job id → { resolve, reject }
+let workerOnProgress = null;  // set during model download, cleared after
+
+const WORKER_SCRIPT = `
+import { fromHub } from 'https://esm.sh/parakeet.js@1.4.4';
+const MODEL_KEY = 'parakeet-tdt-0.6b-v3';
+let model = null;
+
+self.onmessage = async ({ data }) => {
+  if (data.type === 'load') {
+    try {
+      const opts = { ...data.opts };
+      if (data.reportProgress) opts.progress = p => self.postMessage({ type: 'progress', p });
+      model = await fromHub(MODEL_KEY, opts);
+      self.postMessage({ type: 'ready' });
+    } catch (e) {
+      self.postMessage({ type: 'load_error', error: e.message });
+    }
+  } else if (data.type === 'transcribe') {
+    try {
+      const f32 = new Float32Array(data.buffer);
+      const res  = await model.transcribeLongAudio(f32, 16000, { returnTimestamps: false });
+      self.postMessage({ type: 'result', id: data.id, text: res.text });
+    } catch (e) {
+      self.postMessage({ type: 'error', id: data.id, error: e.message });
+    }
+  }
+};
+`;
+
+function handleWorkerMessage({ data }) {
+  if (data.type === 'result') {
+    const cb = workerPending[data.id]; delete workerPending[data.id];
+    if (cb) cb.resolve(data.text);
+  } else if (data.type === 'error') {
+    const cb = workerPending[data.id]; delete workerPending[data.id];
+    if (cb) cb.reject(new Error(data.error));
+  } else if (data.type === 'progress') {
+    workerOnProgress?.(data.p);
+  }
+}
+
+async function initParakeetWorker(opts, onProgress) {
+  const blob = new Blob([WORKER_SCRIPT], { type: 'text/javascript' });
+  const url  = URL.createObjectURL(blob);
+  const w    = new Worker(url, { type: 'module' });
+  URL.revokeObjectURL(url);
+  workerOnProgress = onProgress || null;
+  return new Promise((resolve, reject) => {
+    w.onerror = e => { w.terminate(); reject(new Error(e.message || 'Worker init error')); };
+    w.onmessage = ({ data }) => {
+      if (data.type === 'ready') {
+        parakeetWorker = w;
+        workerOnProgress = null;
+        w.onmessage = handleWorkerMessage;
+        resolve();
+      } else if (data.type === 'load_error') {
+        w.terminate(); reject(new Error(data.error));
+      } else if (data.type === 'progress') {
+        workerOnProgress?.(data.p);
+      }
+    };
+    w.postMessage({ type: 'load', opts, reportProgress: !!onProgress });
+  });
+}
 
 async function loadParakeet(onProgress) {
-  parakeetModel = await fromHub(MODEL_KEY, {
+  const opts = {
     backend:             hasWebGPU ? 'webgpu' : 'wasm',
     encoderQuant:        'fp32',   // int8 silently forced to fp32 for WebGPU anyway
     decoderQuant:        'int8',
     preprocessorBackend: 'js',
-    ...(onProgress ? { progress: onProgress } : {}),
-  });
+  };
+  try {
+    await initParakeetWorker(opts, onProgress);
+    parakeetModel = true;   // sentinel — inference will run in the worker
+  } catch (workerErr) {
+    console.warn('Parakeet Worker unavailable, running on main thread:', workerErr.message);
+    parakeetModel = await fromHub(MODEL_KEY, {
+      ...opts,
+      ...(onProgress ? { progress: onProgress } : {}),
+    });
+  }
   localStorage.setItem('parakeet_model_ready', 'true');
 }
 
-async function runParakeet(float32) {
-  if (!parakeetModel) throw new Error('Model not loaded — download the model first.');
-  const result = await parakeetModel.transcribeLongAudio(float32, 16000, { returnTimestamps: false });
-  return result.text;
+// priority=true inserts the job next in queue (after the current running job).
+// Use for mic-triggered transcriptions so they are not blocked behind a long
+// batch of file transcriptions.
+async function runParakeet(float32, priority = false) {
+  return runQueued(async () => {
+    if (parakeetWorker) {
+      // Worker path — transfer the ArrayBuffer (zero-copy; float32 becomes detached)
+      return new Promise((resolve, reject) => {
+        const id  = ++workerJobSeq;
+        workerPending[id] = { resolve, reject };
+        parakeetWorker.postMessage({ type: 'transcribe', id, buffer: float32.buffer }, [float32.buffer]);
+      });
+    }
+    // Main-thread fallback
+    if (!parakeetModel || parakeetModel === true) throw new Error('Model not loaded');
+    const result = await parakeetModel.transcribeLongAudio(float32, 16000, { returnTimestamps: false });
+    return result.text;
+  }, priority);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -991,7 +1117,7 @@ function AtfInput({ fileEntries, fileIndex }) {
         try {
           const blob = new Blob(atfChunksRef.current, { type: mr.mimeType });
           const f32  = await prepareAudio(await blob.arrayBuffer());
-          const text = await runParakeet(f32);
+          const text = await runParakeet(f32, true);  // priority — jump queue
           if (text?.trim()) setDraft(prev => prev ? `${prev} ${text.trim()}` : text.trim());
         } catch (e) { console.error('ATF mic transcription failed:', e); }
         setAtfBusy(false);
@@ -1094,7 +1220,7 @@ function FileItem({ f, i }) {
         try {
           const blob = new Blob(chunksRef.current, { type: mr.mimeType });
           const f32  = await prepareAudio(await blob.arrayBuffer());
-          const text = await runParakeet(f32);
+          const text = await runParakeet(f32, true);  // priority — jump queue
           if (text?.trim()) {
             const next = notesDraft ? `${notesDraft} ${text.trim()}` : text.trim();
             setNotesDraft(next);
@@ -1571,7 +1697,14 @@ function CompatWarning() {
 }
 
 // Test hooks — used by tests/notes-features.test.js
-window._tj = { files, cfg, busy, historyEntries, appView, wizardIndex, get parakeetModel() { return parakeetModel; }, set parakeetModel(v) { parakeetModel = v; } };
+window._tj = {
+  files, cfg, busy, historyEntries, appView, wizardIndex,
+  get parakeetModel()  { return parakeetModel; },
+  // Nulling parakeetModel in tests also clears the worker reference so mic
+  // button disabled-state checks behave correctly in test environments.
+  set parakeetModel(v) { parakeetModel = v; if (!v) parakeetWorker = null; },
+  get parakeetWorker() { return parakeetWorker; },
+};
 
 render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
 </script>

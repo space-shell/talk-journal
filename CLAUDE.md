@@ -42,7 +42,7 @@ UI sections:
 
 State flow: select folder → scan audio files → transcribe (background, auto if model ready) → wizard review → summary → optional cleanup.
 
-> **Future research**: Move transcription to a Web Worker to free the UI thread during long batches. Currently runs on the main thread. Parakeet.js WASM/WebGPU compatibility with `postMessage` + `SharedArrayBuffer` needs investigation before implementation.
+> **Worker status**: Transcription now runs in a dedicated Web Worker (`initParakeetWorker`). The worker is created from an inline Blob URL with `{ type: 'module' }` so no separate file is needed. Audio is transferred via `ArrayBuffer` transfer (zero-copy; SharedArrayBuffer is NOT required). If the Worker fails to initialise (e.g. the library uses `window` APIs incompatible with worker scope), `loadParakeet` catches the error and falls back to main-thread execution silently. All inference — whether worker or fallback — is serialised through the shared `txQueue`.
 
 ## Audio Pipeline
 
@@ -64,6 +64,17 @@ Supported input formats: any format decodable by `AudioContext.decodeAudioData()
 - **Caching**: Library manages its own IndexedDB cache (`parakeet-cache-db`). No separate Cache API layer.
 - **Boot gate**: `localStorage` flag `parakeet_model_ready` gates auto-load vs. download prompt
 - **Transcription call**: `model.transcribeLongAudio(float32, 16000)` — handles recordings up to 30 min. Returns `{ text, chunks }`.
+
+### Transcription Queue & Worker
+
+All parakeet inference goes through `runParakeet(float32, priority?)` which wraps every call in `runQueued()`. Only one inference runs at a time.
+
+- **`txQueue`** — array of pending jobs `{ fn, resolve, reject }`. `priority=true` puts a job at the front (mic buttons use this so user-triggered dictation isn't blocked behind a long file batch).
+- **`drainTxQueue()`** — picks one job, sets `txRunning=true`, awaits it, then recurses. Never concurrent.
+- **Worker path** (`parakeetWorker` non-null): `Float32Array.buffer` is transferred (zero-copy) to the worker via `postMessage`. Response arrives as `{ type: 'result', id, text }` matched by job ID in `workerPending`.
+- **Fallback path** (`parakeetWorker` null, `parakeetModel` is a model object): calls `parakeetModel.transcribeLongAudio()` directly on the main thread.
+- **`parakeetModel`** is `null` when not loaded, `true` (sentinel) when worker is active, or a model object when using fallback.
+- **`_tj.parakeetWorker`** exposes the worker for debugging. Setting `_tj.parakeetModel = null` in tests also nulls `parakeetWorker` to ensure button disabled-state tests behave correctly.
 
 ## Key Settings (`localStorage` key: `tj_cfg`)
 
