@@ -373,8 +373,8 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 **so that** the card stays focused on content rather than controls.
 
 **Acceptance criteria:**
-- Notion and Obsidian connector buttons are shown when configured in settings
-- A Delete button is present to remove the transcription
+- Notion and Obsidian connector buttons are shown when configured in settings (left side of row)
+- A Delete button is present to remove the transcription, aligned to the right/end of the row
 - Copy and Share buttons are not shown (removed as clutter in the wizard flow)
 - Buttons are in a horizontal flex row and wrap on narrow viewports
 
@@ -390,7 +390,8 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 - No Notes button, no Save button, no read-only toggle — just a textarea
 - Notes are auto-saved to `localStorage` 800 ms after the user stops typing (debounce)
 - Existing notes are pre-populated when the card renders
-- A microphone button beneath the textarea allows voice-to-notes (see US-31)
+- When navigating to a card that has no notes, the textarea is cleared (not populated with the previous card's draft)
+- A microphone button beneath the textarea allows voice-to-notes (see US-31), aligned to the right of the notes footer row
 
 ---
 
@@ -424,14 +425,22 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 
 ---
 
-### US-33 — Pulsing progress feedback during transcription
+### US-33 — Transcription progress feedback
 **As a** field recorder monitoring a running batch,
-**I want** active UI elements to pulse visually during transcription,
-**so that** I can tell at a glance that work is ongoing without watching a status text.
+**I want** active UI elements to pulse visually and show elapsed time during transcription,
+**so that** I can tell at a glance that work is ongoing and roughly how long it is taking.
 
 **Acceptance criteria:**
 - The Transcribe Selected button in the action bar pulses with a breathing opacity animation while a batch is running
 - Per-file status badges pulse while that specific file is being converted or transcribed
+- When a file is in the transcribing state, an elapsed time counter (M:SS format) is shown in the file metadata row
+- The estimated audio duration (from file size) is always shown, giving the user a rough sense of expected transcription time
+
+**Progress approach options considered:**
+- *Elapsed timer* (implemented): simple M:SS counter that starts when transcribing begins. Combined with the estimated audio duration gives the user useful context.
+- *Streaming chunks*: if `parakeet.js` exposes a chunk callback, partially-decoded text could be streamed into the transcript area as it is produced. Requires library investigation.
+- *Percentage from audio duration*: estimate progress as `elapsed / (audioDuration × realTimeFactor)`. Depends on knowing the real-time factor per device, which varies significantly with hardware.
+- *Web Worker offload*: moving transcription to a Worker would allow the main thread to remain interactive and post real progress messages. Blocked pending parakeet.js WASM/WebGPU compatibility research (see US-37).
 
 ---
 
@@ -460,8 +469,9 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 **Acceptance criteria:**
 - After selecting a folder, the first recording card fills the content area
 - Only one card is visible at a time — no list view during the wizard
-- Each card shows: recording title (day + time), filename, transcription text (or loading state), notes section, ATF entries section
-- A progress indicator shows current position and total (e.g. "2 / 7")
+- Each card shows: recording title (time of day only — e.g. "14:30"), filename, transcription text (or loading state), notes section, ATF entries section
+- A progress indicator (`wizard-meta`) shows current position ("Recording X of N") on the left and the day of the week (e.g. "Wednesday") on the right — not the full day + time combination
+- A thin progress fill bar shows percentage completion across all cards
 
 ---
 
@@ -490,6 +500,19 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 - Completed transcriptions appear automatically without requiring a page reload
 
 > **Implementation note**: Transcription currently runs on the main thread. A future improvement is to move it to a Web Worker (`postMessage` + `SharedArrayBuffer`) to fully free the UI. This needs investigation for parakeet.js WASM/WebGPU compatibility before implementation.
+
+---
+
+### US-49 — Cleared transcription state prevents re-transcription
+**As an** audio journaller who deletes a transcription during wizard review,
+**I want** the file to stay in a "cleared" state rather than reverting to pending,
+**so that** auto-transcribe does not re-process it if I restart the batch.
+
+**Acceptance criteria:**
+- When a user deletes a transcription for a file whose source audio still exists, the file's status is set to "Cleared" — not "Pending"
+- Files with Cleared status are skipped by the batch transcription engine
+- A "Cleared" badge is shown on the card (visually neutral, similar to Pending)
+- The notes and ATF entries for that file are also removed when the transcription is cleared
 
 ---
 
@@ -542,6 +565,21 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 - Each ATF entry has a delete button
 - Deletion is immediate with no confirmation (entries are short and easily re-added)
 - The entry is removed from localStorage
+
+---
+
+### US-48 — Speak an ATF entry
+**As an** audio journaller who prefers to speak rather than type,
+**I want** a microphone button in the ATF entry row so I can dictate an entry,
+**so that** I can capture thoughts quickly without switching to the keyboard.
+
+**Acceptance criteria:**
+- A compact mic icon button sits between the text input and the Add button in the ATF add row
+- First tap requests microphone permission and begins recording; icon changes to active state
+- Second tap stops recording; speech is transcribed and placed into the ATF text input (appended if there is already a draft)
+- While transcribing the mic button shows a "…" indicator and is disabled
+- The button is disabled when the parakeet model is not loaded
+- Pressing Enter or clicking Add after transcription commits the entry as normal
 
 ---
 

@@ -419,7 +419,8 @@ const TX_INDEX  = 'transcription:index';
 const fmtBytes     = b => b < 1048576 ? `${(b/1024).toFixed(0)} KB` : b < 1073741824 ? `${(b/1048576).toFixed(1)} MB` : `${(b/1073741824).toFixed(1)} GB`;
 const fmtDur       = b => { const m = b / (17*1048576); return m < 1 ? `~${Math.round(m*60)}s` : `~${m.toFixed(1)} min`; };
 const fmtDate      = ts => new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-const fmtCardTitle = ts => { const d = new Date(ts); return `${d.toLocaleDateString(undefined, { weekday: 'long' })} · ${d.toLocaleTimeString(undefined, { timeStyle: 'short' })}`; };
+const fmtDay  = ts => new Date(ts).toLocaleDateString(undefined, { weekday: 'long' });
+const fmtTime = ts => new Date(ts).toLocaleTimeString(undefined, { timeStyle: 'short' });
 const genId        = () => crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -774,7 +775,7 @@ async function startBatch() {
   busy.value = true;
   for (let i = 0; i < files.value.length; i++) {
     const f = files.value[i];
-    if (!f.selected || f.status === 'done') continue;
+    if (!f.selected || f.status === 'done' || f.status === 'cleared') continue;
     await transcribeFile(i);
   }
   busy.value = false;
@@ -957,8 +958,12 @@ function saveFileEntries(i, entries) {
 const randomAtfType = () => ATF_TYPES[Math.floor(Math.random() * ATF_TYPES.length)].type;
 
 function AtfInput({ fileEntries, fileIndex }) {
-  const [draft, setDraft] = useState('');
-  const [type,  setType]  = useState(randomAtfType);
+  const [draft,   setDraft]   = useState('');
+  const [type,    setType]    = useState(randomAtfType);
+  const [atfRec,  setAtfRec]  = useState(false);
+  const [atfBusy, setAtfBusy] = useState(false);
+  const atfMediaRef  = useRef(null);
+  const atfChunksRef = useRef([]);
 
   const add = () => {
     const text = draft.trim();
@@ -972,6 +977,28 @@ function AtfInput({ fileEntries, fileIndex }) {
   const remove = id => saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
   const onKey  = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
   const placeholder = ATF_TYPES.find(a => a.type === type)?.placeholder || '';
+
+  const toggleAtfMic = async () => {
+    if (atfRec) { atfMediaRef.current?.stop(); setAtfRec(false); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      atfChunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = e => { if (e.data.size > 0) atfChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setAtfBusy(true);
+        try {
+          const blob = new Blob(atfChunksRef.current, { type: mr.mimeType });
+          const f32  = await prepareAudio(await blob.arrayBuffer());
+          const text = await runParakeet(f32);
+          if (text?.trim()) setDraft(prev => prev ? `${prev} ${text.trim()}` : text.trim());
+        } catch (e) { console.error('ATF mic transcription failed:', e); }
+        setAtfBusy(false);
+      };
+      mr.start(); atfMediaRef.current = mr; setAtfRec(true);
+    } catch (e) { console.error('Mic access denied:', e); }
+  };
 
   return html`
     <div class="atf-section">
@@ -997,6 +1024,12 @@ function AtfInput({ fileEntries, fileIndex }) {
           maxlength=${ATF_MAX} value=${draft}
           onInput=${e => setDraft(e.target.value)}
           onKeyDown=${onKey} />
+        <button class="btn btn-ghost btn-sm" data-mic
+          disabled=${!parakeetModel || atfBusy}
+          title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
+          onClick=${toggleAtfMic}>
+          ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
+        </button>
         <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
       </div>
       ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
@@ -1009,15 +1042,28 @@ const BADGE_MAP = {
   transcribing: ['badge-transcribing', 'Transcribing'],
   done:         ['badge-done',         'Done'],
   error:        ['badge-error',        'Error'],
+  cleared:      ['badge-pending',      'Cleared'],
 };
 
 function FileItem({ f, i }) {
   const [notesDraft, setNotesDraft] = useState(f.notes || '');
   const [recording,  setRecording]  = useState(false);
   const [micBusy,    setMicBusy]    = useState(false);
+  const [elapsed,    setElapsed]    = useState(0);
   const mediaRecRef   = useRef(null);
   const chunksRef     = useRef([]);
   const notesTimerRef = useRef(null);
+  const elapsedRef    = useRef(null);
+
+  useEffect(() => {
+    if (f.status === 'transcribing') {
+      setElapsed(0);
+      elapsedRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
+    } else {
+      clearInterval(elapsedRef.current);
+    }
+    return () => clearInterval(elapsedRef.current);
+  }, [f.status]);
 
   const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
   const inProgress = f.status === 'converting' || f.status === 'transcribing';
@@ -1067,7 +1113,7 @@ function FileItem({ f, i }) {
     if (f.deleted) {
       files.value = files.value.filter((_, idx) => idx !== i);
     } else {
-      updateFile(i, { transcript: null, status: 'pending', savedId: null, notes: '' });
+      updateFile(i, { transcript: null, status: 'cleared', savedId: null, notes: '', entries: [] });
       setNotesDraft('');
     }
     refreshHistory(); refreshStorage();
@@ -1078,11 +1124,11 @@ function FileItem({ f, i }) {
       <div class="file-row">
         <div class="file-info">
           <div class="file-header">
-            <div class="card-title">${fmtCardTitle(f.mtime)}</div>
+            <div class="card-title">${fmtTime(f.mtime)}</div>
             <span class=${'badge ' + bc}>${bl}</span>
           </div>
           <div class="file-name" title=${f.path}>${f.path}</div>
-          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)}</div>
+          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)}${f.status === 'transcribing' && elapsed > 0 ? ` · ${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}` : ''}</div>
         </div>
       </div>
       ${inProgress && html`<div class="progress-bar"><div class="progress-fill"></div></div>`}
@@ -1091,12 +1137,12 @@ function FileItem({ f, i }) {
         <div class="tx-actions">
           ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
           ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
-          <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
+          <button class="btn btn-danger btn-sm" style="margin-left:auto" onClick=${onDelete}>Delete</button>
         </div>
         <textarea class="notes-area" placeholder="Notes…" rows="3"
           value=${notesDraft} onInput=${onNotesChange}
         ></textarea>
-        <div class="notes-footer">
+        <div class="notes-footer" style="justify-content:flex-end">
           <button class="btn btn-ghost btn-sm" data-mic
             disabled=${!parakeetModel || micBusy}
             title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Speak a note'}
@@ -1158,9 +1204,9 @@ function WizardView() {
       <div class="wizard-progress-wrap"><div class="wizard-progress-fill" style=${'width:' + pct + '%'}></div></div>
       <div class="wizard-meta">
         <span>Recording ${idx + 1} of ${fs.length}</span>
-        <span>${fmtCardTitle(f.mtime)}</span>
+        <span>${fmtDay(f.mtime)}</span>
       </div>
-      <${FileItem} f=${f} i=${idx} />
+      <${FileItem} key=${idx} f=${f} i=${idx} />
     </div>`;
 }
 

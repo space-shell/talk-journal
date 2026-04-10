@@ -1,16 +1,18 @@
 /**
  * Behavioural tests for Epics 13–15 — Wizard flow, ATF entries, Session summary
- * US-35: One recording shown at a time with progress indicator
+ * US-35: One recording shown at a time with progress indicator (day in meta, time in card title)
  * US-36: Previous / Next / Finish navigation
  * US-37: Next disabled while transcribing
- * US-38: ATF entry input per recording card
- * US-39: Multiple entries per type
+ * US-38: ATF entry input per recording card (unified input + type dropdown)
+ * US-39: Multiple entries per type (single Add button, not 3)
  * US-40: Character limit 160
  * US-41: Delete individual entries
  * US-42: Summary page accessible via Finish
  * US-43: Summary shows counts per ATF type
  * US-44: Summary lists all entries grouped by type
  * US-45: Start new session returns to home
+ * US-48: ATF mic button is present in the add row
+ * US-49: Deleted transcription sets status to 'cleared', not 'pending'
  *
  * Run via Chrome DevTools evaluate_script on the live app page.
  * Requires window._tj test hooks (files, busy, appView, wizardIndex signals).
@@ -208,13 +210,20 @@
     assert(labels.includes('Feelings'), 'Feelings ATF group not found');
   });
 
-  await test('US-39: Add button is present for each ATF type', async () => {
+  await test('US-39: single Add button is present in unified ATF row', async () => {
     injectWizard([makeFile({ transcript: 'Some transcript', status: 'done' })]);
     await sleep(60);
     const addBtns = [...document.querySelectorAll('.atf-section button')].filter(
       b => b.textContent.trim() === 'Add'
     );
-    assert(addBtns.length >= 3, `Expected at least 3 Add buttons, found ${addBtns.length}`);
+    assert(addBtns.length === 1, `Expected exactly 1 Add button, found ${addBtns.length}`);
+  });
+
+  await test('US-48: ATF mic button is present in the add row', async () => {
+    injectWizard([makeFile({ transcript: 'Some transcript', status: 'done' })]);
+    await sleep(60);
+    const micBtn = document.querySelector('.atf-add-row [data-mic]');
+    assert(micBtn, '[data-mic] button not found in .atf-add-row');
   });
 
   // ── US-40: Character limit 160 ────────────────────────────────────────────
@@ -281,11 +290,33 @@
     assert(window._tj.appView.value === 'home', `Expected appView=home, got ${window._tj.appView.value}`);
   });
 
+  // ── US-49: Cleared transcription state ────────────────────────────────────
+
+  await test('US-49: wizard-meta shows day of week (not full date+time)', async () => {
+    injectWizard([makeFile()]);
+    await sleep(60);
+    const meta = document.querySelector('.wizard-meta');
+    assert(meta, '.wizard-meta not found');
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const hasDayName = days.some(d => meta.textContent.includes(d));
+    assert(hasDayName, `Expected a day name in wizard-meta, got: ${meta.textContent}`);
+  });
+
+  await test('US-49: card title shows time only (no day name)', async () => {
+    injectWizard([makeFile()]);
+    await sleep(60);
+    const title = document.querySelector('.card-title');
+    assert(title, '.card-title not found');
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const hasDayName = days.some(d => title.textContent.includes(d));
+    assert(!hasDayName, `Card title should not contain a day name, got: ${title.textContent}`);
+  });
+
   // ── Results ───────────────────────────────────────────────────────────────
 
   const passed = results.filter(r => r.status === 'PASS').length;
   const failed = results.filter(r => r.status === 'FAIL').length;
-  console.group(`%cEpics 13–15 Behavioural Tests — ${passed}/${results.length} passed`, failed ? 'color:red' : 'color:green');
+  console.group(`%cEpics 13–16 Behavioural Tests — ${passed}/${results.length} passed`, failed ? 'color:red' : 'color:green');
   console.table(results);
   console.groupEnd();
   return results;
