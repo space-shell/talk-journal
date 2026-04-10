@@ -368,3 +368,46 @@ The primary persona is a **field recorder** — someone who uses a DJI Mic 2 tra
 **Acceptance criteria:**
 - The app functions fully with no login, no API key, and no subscription
 - Settings contain no fields that are required for transcription to work (language is optional)
+
+---
+
+## Epic 11 — Notes & In-Card Actions
+
+### US-29 — Horizontal action buttons
+**As a** field recorder reviewing a transcription card,
+**I want** the action buttons to appear in a single horizontal row below the transcript,
+**so that** they are compact, scannable, and easy to tap.
+
+**Acceptance criteria:**
+- Copy, Share (when available), Notion/Obsidian (when configured), Notes, and Delete buttons are in a horizontal flex row
+- Buttons wrap to a new line if the viewport is too narrow
+
+---
+
+### US-30 — Notes: add, save, and view
+**As a** field recorder who wants to annotate a transcription,
+**I want** to open a notes area, type a note, save it, and see it in a clean read-only view,
+**so that** my annotations are clearly distinguished from the transcript text.
+
+**Acceptance criteria:**
+- Clicking the Notes button on a transcription card opens a notes section below
+- If no notes exist: the section opens in edit mode (textarea visible, Save and Transcribe buttons shown)
+- If notes already exist: the section opens in read-only view (note text visible, Edit button shown)
+- Clicking Save persists the note to `localStorage` and switches to read-only view
+- Clicking Edit returns to the textarea with the existing text preserved
+- Notes persist across sessions alongside the transcription entry in `localStorage`
+
+---
+
+### US-31 — Voice note transcription into notes
+**As a** field recorder who prefers to speak rather than type,
+**I want** to tap a Transcribe button in the notes area to record a voice note, then tap again to stop and have my speech appended to the notes field,
+**so that** I can add spoken context without typing.
+
+**Acceptance criteria:**
+- A Transcribe button is visible in the notes edit area
+- First tap requests microphone permission (if not already granted) and starts recording; button label changes to Stop
+- Second tap stops recording; audio is transcribed using the loaded parakeet model and appended to the notes draft (space-separated if notes already exist)
+- If the parakeet model is not loaded, the Transcribe button is disabled
+- If microphone access is denied, no crash occurs (error logged to console)
+- While transcription is in progress the button shows "Transcribing…" and is disabled

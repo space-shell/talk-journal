@@ -243,14 +243,12 @@
       100% { transform: translateX(200%) scaleX(.4); }
     }
 
-    .tx-container { display: flex; gap: 0.75rem; align-items: flex-start; }
     .transcript {
-      flex: 1; min-width: 0;
       background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
       padding: 0.875rem 1rem; font-size: 0.875rem; line-height: 1.7;
       white-space: pre-wrap; word-break: break-word;
     }
-    .tx-actions { display: flex; flex-direction: column; gap: 0.35rem; flex-shrink: 0; }
+    .tx-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.5rem; }
 
     .notes-area {
       width: 100%; background: var(--surface2); border: 1px solid var(--border);
@@ -258,6 +256,12 @@
       color: var(--text); resize: vertical; line-height: 1.5;
     }
     .notes-area:focus { outline: none; border-color: var(--accent); }
+    .notes-footer { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .notes-view {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.75rem 1rem; font-size: 0.875rem; line-height: 1.7;
+      white-space: pre-wrap; word-break: break-word; color: var(--muted);
+    }
 
     .error-msg {
       font-size: 0.8rem; color: var(--red);
@@ -298,7 +302,7 @@
 <div id="root"></div>
 <script type="module">
 import { h, render } from 'https://esm.sh/preact@10';
-import { useState, useEffect } from 'https://esm.sh/preact@10/hooks';
+import { useState, useEffect, useRef } from 'https://esm.sh/preact@10/hooks';
 import { signal, batch } from 'https://esm.sh/@preact/signals@1?deps=preact@10';
 import htm from 'https://esm.sh/htm@3?deps=preact@10';
 import { fromHub } from 'https://esm.sh/parakeet.js@1.4.4';
@@ -731,10 +735,12 @@ function sendToObsidian(i) {
 // SVG ICONS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const IconGear   = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`;
-const IconX      = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
-const IconFolder = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
-const IconPlay   = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+const IconGear      = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`;
+const IconX         = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+const IconFolder    = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`;
+const IconPlay      = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+const IconMic       = () => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></svg>`;
+const IconMicActive = () => html`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="9" y="2" width="6" height="11" rx="3"/><path fill="none" stroke="currentColor" stroke-width="2" d="M5 10a7 7 0 0014 0"/><line stroke="currentColor" stroke-width="2" x1="12" y1="17" x2="12" y2="21"/><line stroke="currentColor" stroke-width="2" x1="8" y1="21" x2="16" y2="21"/></svg>`;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // COMPONENTS
@@ -750,16 +756,61 @@ const BADGE_MAP = {
 
 function FileItem({ f, i }) {
   const [notesOpen,  setNotesOpen]  = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
   const [notesDraft, setNotesDraft] = useState(f.notes || '');
+  const [recording,  setRecording]  = useState(false);
+  const [micBusy,    setMicBusy]    = useState(false);
+  const mediaRecRef = useRef(null);
+  const chunksRef   = useRef([]);
 
   const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
   const inProgress = f.status === 'converting' || f.status === 'transcribing';
   const isBusy     = busy.value;
   const c          = cfg.value;
 
-  const saveNotes = text => {
+  const persistNotes = text => {
     updateFile(i, { notes: text });
     if (f.savedId) updateTx(f.savedId, { notes: text });
+  };
+
+  const handleSave = () => { persistNotes(notesDraft); setNotesSaved(true); };
+
+  const toggleNotes = () => {
+    if (!notesOpen) { setNotesSaved(!!notesDraft); setNotesOpen(true); }
+    else setNotesOpen(false);
+  };
+
+  const toggleRecording = async () => {
+    if (recording) {
+      mediaRecRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setMicBusy(true);
+        try {
+          const blob  = new Blob(chunksRef.current, { type: mr.mimeType });
+          const ab    = await blob.arrayBuffer();
+          const f32   = await prepareAudio(ab);
+          const text  = await runParakeet(f32);
+          if (text?.trim()) {
+            const next = notesDraft ? `${notesDraft} ${text.trim()}` : text.trim();
+            setNotesDraft(next);
+            persistNotes(next);
+          }
+        } catch (e) { console.error('Mic transcription failed:', e); }
+        setMicBusy(false);
+      };
+      mr.start();
+      mediaRecRef.current = mr;
+      setRecording(true);
+    } catch (e) { console.error('Mic access denied:', e); }
   };
 
   const onDelete = () => {
@@ -790,24 +841,38 @@ function FileItem({ f, i }) {
       </div>
       ${inProgress && html`<div class="progress-bar"><div class="progress-fill"></div></div>`}
       ${f.transcript !== null && html`
-        <div class="tx-container">
-          <div class="transcript">${f.transcript}</div>
-          <div class="tx-actions">
-            <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(f.transcript)}>Copy</button>
-            ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${() => shareOne(i)}>Share</button>`}
-            ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
-            ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
-            <button class="btn btn-ghost btn-sm" onClick=${() => setNotesOpen(!notesOpen)}>Notes</button>
-            <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
-          </div>
+        <div class="transcript">${f.transcript}</div>
+        <div class="tx-actions">
+          <button class="btn btn-ghost btn-sm" onClick=${() => copyToClipboard(f.transcript)}>Copy</button>
+          ${navigator.share && html`<button class="btn btn-ghost btn-sm" onClick=${() => shareOne(i)}>Share</button>`}
+          ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
+          ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
+          <button class="btn btn-ghost btn-sm" onClick=${toggleNotes}>Notes</button>
+          <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
         </div>
       `}
-      ${notesOpen && html`
+      ${notesOpen && (notesSaved ? html`
+        <div class="notes-view">${notesDraft}</div>
+        <div class="notes-footer">
+          <button class="btn btn-ghost btn-sm" onClick=${() => setNotesSaved(false)}>Edit</button>
+        </div>
+      ` : html`
         <textarea class="notes-area" placeholder="Add notes…" rows="3"
           value=${notesDraft}
-          onInput=${e => { setNotesDraft(e.target.value); saveNotes(e.target.value); }}
+          onInput=${e => setNotesDraft(e.target.value)}
         ></textarea>
-      `}
+        <div class="notes-footer">
+          <button class="btn btn-primary btn-sm" onClick=${handleSave}>Save</button>
+          <button class="btn btn-ghost btn-sm" data-mic
+            disabled=${!parakeetModel || micBusy}
+            title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Record a voice note'}
+            onClick=${toggleRecording}>
+            ${micBusy ? html`Transcribing…` : recording
+              ? html`<${IconMicActive} /> Stop`
+              : html`<${IconMic} /> Transcribe`}
+          </button>
+        </div>
+      `)}
       ${f.error && html`
         <div class="error-msg">
           <span>${f.error}</span>
@@ -1099,6 +1164,9 @@ function CompatWarning() {
       <p>This app uses the File System Access API, which is only supported in Chrome, Edge, and Brave. Please open this page in one of those browsers.</p>
     </div>`;
 }
+
+// Test hooks — used by tests/notes-features.test.js
+window._tj = { files, cfg, busy, historyEntries, get parakeetModel() { return parakeetModel; }, set parakeetModel(v) { parakeetModel = v; } };
 
 render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
 </script>
