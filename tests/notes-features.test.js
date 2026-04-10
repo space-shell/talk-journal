@@ -22,11 +22,21 @@
   }
 
   async function test(name, fn) {
+    // Always reset shared state before each test to prevent pollution
+    if (window._tj) {
+      window._tj.files.value = [];
+      window._tj.busy.value  = false;
+    }
+    await sleep(40);
     try {
       await fn();
       results.push({ status: 'PASS', name, error: '' });
     } catch (e) {
       results.push({ status: 'FAIL', name, error: e.message });
+    } finally {
+      // Always clean up, even if the test threw
+      if (window._tj) window._tj.files.value = [];
+      if (window._tj) window._tj.busy.value  = false;
     }
   }
 
