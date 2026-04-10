@@ -199,20 +199,22 @@
     assert(atf, '.atf-section not found when card has transcript');
   });
 
-  await test('US-38: ATF section has inputs for Action, Thought, Feeling', async () => {
+  await test('US-38: ATF section has labels for Actions, Thoughts, Feelings', async () => {
     injectWizard([makeFile({ transcript: 'Some transcript', status: 'done' })]);
     await sleep(60);
-    const labels = [...document.querySelectorAll('.atf-group-label')].map(el => el.textContent.trim());
+    const labels = [...document.querySelectorAll('.atf-label')].map(el => el.textContent.trim());
     assert(labels.includes('Actions'),  'Actions ATF group not found');
     assert(labels.includes('Thoughts'), 'Thoughts ATF group not found');
     assert(labels.includes('Feelings'), 'Feelings ATF group not found');
   });
 
-  await test('US-39: Add button is present in each ATF group', async () => {
+  await test('US-39: Add button is present for each ATF type', async () => {
     injectWizard([makeFile({ transcript: 'Some transcript', status: 'done' })]);
     await sleep(60);
-    const addBtns = [...document.querySelectorAll('.atf-add-btn')];
-    assert(addBtns.length >= 3, `Expected at least 3 ATF Add buttons, found ${addBtns.length}`);
+    const addBtns = [...document.querySelectorAll('.atf-section button')].filter(
+      b => b.textContent.trim() === 'Add'
+    );
+    assert(addBtns.length >= 3, `Expected at least 3 Add buttons, found ${addBtns.length}`);
   });
 
   // ── US-40: Character limit 160 ────────────────────────────────────────────
@@ -227,14 +229,14 @@
 
   // ── US-42/44: Summary page ────────────────────────────────────────────────
 
-  await test('US-42: summary page renders when appView=summary', async () => {
+  await test('US-42: summary stats grid renders when appView=summary', async () => {
     window._tj.files.value = [makeFile({
       entries: [{ id: '1', type: 'action', text: 'Do something', createdAt: new Date().toISOString() }]
     })];
     window._tj.appView.value = 'summary';
     await sleep(60);
-    const summary = document.querySelector('.summary-page');
-    assert(summary, '.summary-page not found when appView=summary');
+    const stats = document.querySelector('.summary-stats');
+    assert(stats, '.summary-stats not found when appView=summary');
   });
 
   await test('US-43: summary shows stat counts', async () => {
