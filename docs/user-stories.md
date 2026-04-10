@@ -1,8 +1,10 @@
-# Talk Journal — User Stories
+# Tibbs — User Stories
 
-Derived from the implemented application at https://space-shell.github.io/talk-journal/
+Deployed at https://space-shell.github.io/talk-journal/
 
-The primary persona is a **field recorder** — someone who uses a DJI Mic 2 transmitter to capture audio (interviews, lectures, notes-to-self) and wants to convert those recordings to searchable, shareable text with minimal friction and no cloud dependency.
+The primary persona is an **audio journaller** — someone who records voice notes throughout their day using any device (phone, dictaphone, laptop), then processes those recordings at the end of the day to extract structured reflections: actions to take, thoughts to capture, and feelings to acknowledge.
+
+The original user stories (Epics 1–11) were written for an earlier DJI-specific transcription tool. They remain valid for the transcription and model infrastructure but the persona and app purpose have since broadened significantly. Epics 12 onwards reflect the current Tibbs vision.
 
 ---
 
@@ -438,3 +440,164 @@ The primary persona is a **field recorder** — someone who uses a DJI Mic 2 tra
 **Acceptance criteria:**
 - The Transcribe Selected button in the action bar pulses with a breathing opacity animation while a batch is running
 - Per-file status badges pulse while that specific file is being converted or transcribed
+
+---
+
+## Epic 12 — Broad Audio Format Support
+
+### US-34 — Accept any AudioContext-compatible audio file
+**As an** audio journaller who records on different devices,
+**I want** the app to accept any audio format my device produces,
+**so that** I am not locked into a specific recorder or file type.
+
+**Acceptance criteria:**
+- The file scan accepts `.wav`, `.mp3`, `.m4a`, `.aac`, `.ogg`, `.oga`, `.opus`, `.webm`, `.flac` (case-insensitive)
+- All formats are decoded via `AudioContext.decodeAudioData()` — no client-side conversion required
+- Files in unsupported formats are silently skipped (not shown in the list)
+- UI labels refer to "recordings" or "audio files", not "WAV files"
+
+---
+
+## Epic 13 — Journaling Wizard
+
+### US-35 — One-at-a-time guided review
+**As an** audio journaller processing my day's recordings,
+**I want** each recording presented to me one at a time in a full-screen card,
+**so that** I can give each entry my full attention and the process feels intentional rather than overwhelming.
+
+**Acceptance criteria:**
+- After selecting a folder, the first recording card fills the content area
+- Only one card is visible at a time — no list view during the wizard
+- Each card shows: recording title (day + time), filename, transcription text (or loading state), notes section, ATF entries section
+- A progress indicator shows current position and total (e.g. "2 / 7")
+
+---
+
+### US-36 — Navigate between recordings
+**As an** audio journaller working through my entries,
+**I want** Previous and Next buttons to move between recording cards,
+**so that** I can work through them at my own pace and revisit earlier ones.
+
+**Acceptance criteria:**
+- Previous button is hidden on the first card; Next button is hidden on the last card (replaced by "Finish")
+- Previous and Next are always visible and tappable (not inside a scroll area)
+- Navigating away and back preserves all notes and ATF entries entered for a card
+- If the current card is still transcribing, Next is disabled with a "Transcribing…" label
+
+---
+
+### US-37 — Transcription runs in the background during review
+**As an** audio journaller who has several recordings,
+**I want** transcription to run in the background while I review earlier entries,
+**so that** by the time I reach a later card it is already ready.
+
+**Acceptance criteria:**
+- Transcription begins immediately after folder selection (when auto-transcribe is on and model is loaded)
+- The user can begin reviewing the first card while subsequent cards are still transcribing
+- Cards that are not yet transcribed show a loading/transcribing state
+- Completed transcriptions appear automatically without requiring a page reload
+
+> **Implementation note**: Transcription currently runs on the main thread. A future improvement is to move it to a Web Worker (`postMessage` + `SharedArrayBuffer`) to fully free the UI. This needs investigation for parakeet.js WASM/WebGPU compatibility before implementation.
+
+---
+
+## Epic 14 — ATF Entries (Action / Thought / Feeling)
+
+### US-38 — Add an Action entry to a recording
+**As an** audio journaller reviewing a transcription,
+**I want** to capture a specific action that emerged from this recording,
+**so that** I have a clear to-do linked to the context of what I said.
+
+**Acceptance criteria:**
+- An "Add Action" button (or similar affordance) is visible in the ATF section of each card
+- Tapping it opens a single-line text input with a 160-character limit and a character counter
+- Pressing Save adds the entry to the card and persists it to `localStorage`
+- Multiple Action entries can be added to the same card
+
+---
+
+### US-39 — Add a Thought entry to a recording
+**As an** audio journaller reviewing a transcription,
+**I want** to capture a key thought or insight that emerged from this recording,
+**so that** I can crystallise the cognitive content of what I said.
+
+**Acceptance criteria:**
+- Same affordance as Action entries but typed as `thought`
+- 160-character limit with counter
+- Multiple Thought entries per card
+
+---
+
+### US-40 — Add a Feeling entry to a recording
+**As an** audio journaller reviewing a transcription,
+**I want** to capture the emotional state present in or evoked by this recording,
+**so that** I can track my emotional patterns over time.
+
+**Acceptance criteria:**
+- Same affordance as Action and Thought but typed as `feeling`
+- 160-character limit with counter
+- Multiple Feeling entries per card
+
+---
+
+### US-41 — Delete an ATF entry
+**As an** audio journaller who made a mistake or changed their mind,
+**I want** to delete an individual ATF entry,
+**so that** my record stays accurate.
+
+**Acceptance criteria:**
+- Each ATF entry has a delete button
+- Deletion is immediate with no confirmation (entries are short and easily re-added)
+- The entry is removed from localStorage
+
+---
+
+## Epic 15 — Session Summary
+
+### US-42 — View session statistics
+**As an** audio journaller who has finished reviewing all recordings,
+**I want** to see a summary of what I produced in this session,
+**so that** I get a sense of the volume and shape of my reflection.
+
+**Acceptance criteria:**
+- Summary page is reached by pressing "Finish" on the final wizard card
+- Statistics shown: total recordings reviewed, total words transcribed, total ATF entries, breakdown by type (actions / thoughts / feelings)
+- Summary is read-only — individual cards can be revisited via a back navigation
+
+---
+
+### US-43 — Review all ATF entries grouped by type
+**As an** audio journaller on the summary page,
+**I want** to see all my Action, Thought, and Feeling entries listed together by type,
+**so that** I can see the full picture of what emerged from the session.
+
+**Acceptance criteria:**
+- Three sections on the summary: Actions, Thoughts, Feelings
+- Each entry shows its text and the filename of the recording it came from
+- Sections are collapsed if empty
+
+---
+
+### US-44 — Delete source audio files at end of session
+**As an** audio journaller who no longer needs the raw recordings,
+**I want** the option to delete all source audio files after the session,
+**so that** I free up device storage in one step.
+
+**Acceptance criteria:**
+- A "Delete audio files" button appears on the summary page
+- A clear confirmation dialog explains this is irreversible
+- Only files for which transcription succeeded are eligible for deletion
+- The button is absent if the folder was opened in read-only mode
+
+---
+
+### US-45 — Delete all transcriptions at end of session
+**As an** audio journaller who treats sessions as ephemeral,
+**I want** the option to clear all transcriptions from the browser after reviewing them,
+**so that** no sensitive content persists on this device.
+
+**Acceptance criteria:**
+- A separate "Delete transcriptions" button (distinct from the audio file delete) appears on the summary page
+- Confirmation required — explains ATF entries will also be removed
+- localStorage entries for the current session are removed
+- This is independent of the audio file deletion

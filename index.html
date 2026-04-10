@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DJI Mic 2 Transcriber</title>
+  <title>Tibbs</title>
   <style>
     /* Light-first — dark mode via prefers-color-scheme */
     :root {
@@ -264,6 +264,37 @@
       padding: 0.75rem 1rem; font-size: 0.875rem; line-height: 1.7;
       white-space: pre-wrap; word-break: break-word; color: var(--muted);
     }
+
+    /* ── ATF Entries ──────────────────────────────────────────────────────── */
+    .atf-section { display: flex; flex-direction: column; gap: 0.75rem; }
+    .atf-group   { display: flex; flex-direction: column; gap: 0.4rem; }
+    .atf-label   {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; display: flex; align-items: center; gap: 0.4rem;
+    }
+    .atf-label.action  { color: var(--accent); }
+    .atf-label.thought { color: var(--green); }
+    .atf-label.feeling { color: var(--yellow); }
+    .atf-chip {
+      display: flex; align-items: flex-start; gap: 0.5rem;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.85rem; line-height: 1.5;
+    }
+    .atf-chip span { flex: 1; word-break: break-word; }
+    .atf-chip button {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      padding: 0; font-size: 1rem; line-height: 1; flex-shrink: 0;
+      opacity: .5; transition: opacity .15s;
+    }
+    .atf-chip button:hover { opacity: 1; color: var(--red); }
+    .atf-add-row { display: flex; gap: 0.4rem; align-items: stretch; }
+    .atf-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.85rem;
+      font-family: inherit; color: var(--text);
+    }
+    .atf-input:focus { outline: none; border-color: var(--accent); }
+    .atf-counter { font-size: 0.72rem; color: var(--muted); text-align: right; }
 
     .error-msg {
       font-size: 0.8rem; color: var(--red);
@@ -580,7 +611,8 @@ async function pickDrive() {
 async function scan(handle, prefix, found) {
   for await (const [name, entry] of handle.entries()) {
     const path = prefix ? `${prefix}/${name}` : name;
-    if (entry.kind === 'file' && name.toLowerCase().endsWith('.wav')) {
+    const AUDIO_EXTS = /\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac)$/i;
+    if (entry.kind === 'file' && AUDIO_EXTS.test(name)) {
       const file     = await entry.getFile();
       const existing = getTxByFilename(name);
       found.push({
@@ -590,7 +622,8 @@ async function scan(handle, prefix, found) {
         transcript: existing ? existing.text        : null,
         savedId:    existing ? existing.id          : null,
         deleted:    existing ? (existing.deleted ?? false) : false,
-        notes:      existing ? (existing.notes || '') : '',
+        notes:      existing ? (existing.notes   || '')  : '',
+        entries:    existing ? (existing.entries || [])  : [],
         error: null,
       });
     } else if (entry.kind === 'directory') {
@@ -650,6 +683,7 @@ async function transcribeFile(i) {
         silenceRemoved:  cfg.value.vad_enabled,
         deleted:         false,
         notes:           '',
+        entries:         [],
       };
       saveTx(entry);
       savedId = entry.id;
@@ -735,7 +769,7 @@ async function sendToNotion(i) {
 
 function sendToObsidian(i) {
   const f = files.value[i]; if (!f?.transcript || !cfg.value.obsidian_vault_name) return;
-  const name = f.name.replace(/\.wav$/i, '');
+  const name = f.name.replace(/\.[^.]+$/, '');
   window.open(`obsidian://new?vault=${encodeURIComponent(cfg.value.obsidian_vault_name)}&name=${encodeURIComponent(name)}&content=${encodeURIComponent(f.transcript)}`);
 }
 
@@ -753,6 +787,57 @@ const IconMicActive = () => html`<svg viewBox="0 0 24 24" fill="currentColor" st
 // ══════════════════════════════════════════════════════════════════════════════
 // COMPONENTS
 // ══════════════════════════════════════════════════════════════════════════════
+
+const ATF_MAX   = 160;
+const ATF_TYPES = [
+  { type: 'action',  label: 'Actions',  placeholder: 'Something to do…' },
+  { type: 'thought', label: 'Thoughts', placeholder: 'An insight or reflection…' },
+  { type: 'feeling', label: 'Feelings', placeholder: 'An emotional state…' },
+];
+
+function saveFileEntries(i, entries) {
+  updateFile(i, { entries });
+  const id = files.value[i]?.savedId;
+  if (id) updateTx(id, { entries });
+}
+
+function AtfGroup({ type, label, placeholder, fileEntries, fileIndex }) {
+  const [draft, setDraft] = useState('');
+  const items = fileEntries.filter(e => e.type === type);
+
+  const add = () => {
+    const text = draft.trim();
+    if (!text) return;
+    const entry = { id: genId(), type, text, createdAt: new Date().toISOString() };
+    saveFileEntries(fileIndex, [...fileEntries, entry]);
+    setDraft('');
+  };
+
+  const remove = id => {
+    saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
+  };
+
+  const onKey = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
+
+  return html`
+    <div class="atf-group">
+      <div class=${'atf-label ' + type}>${label}</div>
+      ${items.map(e => html`
+        <div class="atf-chip" key=${e.id}>
+          <span>${e.text}</span>
+          <button onClick=${() => remove(e.id)} title="Remove" aria-label="Remove entry">×</button>
+        </div>
+      `)}
+      <div class="atf-add-row">
+        <input class="atf-input" type="text" placeholder=${placeholder}
+          maxlength=${ATF_MAX} value=${draft}
+          onInput=${e => setDraft(e.target.value)}
+          onKeyDown=${onKey} />
+        <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
+      </div>
+      ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
+    </div>`;
+}
 
 const BADGE_MAP = {
   pending:      ['badge-pending',      'Pending'],
@@ -881,6 +966,14 @@ function FileItem({ f, i }) {
           </button>
         </div>
       `)}
+      ${f.transcript !== null && html`
+        <div class="atf-section">
+          ${ATF_TYPES.map(({ type, label, placeholder }) => html`
+            <${AtfGroup} key=${type} type=${type} label=${label} placeholder=${placeholder}
+              fileEntries=${f.entries || []} fileIndex=${i} />
+          `)}
+        </div>
+      `}
       ${f.error && html`
         <div class="error-msg">
           <span>${f.error}</span>
@@ -907,12 +1000,12 @@ function FilesPanel() {
           <div class="panel-meta">${meta}</div>
         </div>
         <button class="btn btn-ghost" onClick=${pickDrive}>
-          <${IconFolder} /> Select DJI Drive
+          <${IconFolder} /> Select Folder
         </button>
       </div>
       ${deleteBannerVis.value && html`
         <div class="notice danger">
-          <span>Source files will be deleted from the DJI drive after each successful transcription. This cannot be undone.</span>
+          <span>Source audio files will be deleted from the selected folder after each successful transcription. This cannot be undone.</span>
           <button class="btn btn-ghost btn-sm" onClick=${() => { deleteBannerVis.value = false; startBatch(); }}>Proceed</button>
           <button class="btn btn-ghost btn-sm" onClick=${() => { deleteBannerVis.value = false; }}>Cancel</button>
         </div>
@@ -921,7 +1014,7 @@ function FilesPanel() {
         ${fs.length === 0 ? html`
           <div class="empty">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-            ${dh ? 'No WAV files found on this drive' : 'Select the DJI Mic 2 drive to list recordings'}
+            ${dh ? 'No audio files found in this folder' : 'Select a folder to list recordings'}
           </div>
         ` : fs.map((f, i) => html`<${FileItem} key=${f.path} f=${f} i=${i} />`)}
       </div>
@@ -972,7 +1065,7 @@ function Header() {
   const ms = modelStatus.value;
   return html`
     <header>
-      <h1>DJI Mic 2 Transcriber</h1>
+      <h1>Tibbs</h1>
       <div style="display:flex;align-items:center;gap:.75rem">
         <div class="model-status">
           <div class=${'model-dot' + (ms.dot ? ' ' + ms.dot : '')}></div>
@@ -1049,7 +1142,7 @@ function SettingsDrawer() {
       obsidian_vault_name:        obsidian,
     };
     if (!prevDelete && delAfter) {
-      alert('Delete after transcription enabled.\n\nSource WAV files will be permanently deleted from your DJI drive after each successful transcription. Ensure the drive is not your only copy of these recordings.');
+      alert('Delete after transcription enabled.\n\nSource audio files will be permanently deleted from the selected folder after each successful transcription. Ensure the folder is not your only copy of these recordings.');
     }
     cfg.value = newCfg;
     localStorage.setItem('tj_cfg', JSON.stringify(newCfg));
