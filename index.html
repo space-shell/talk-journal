@@ -313,6 +313,45 @@
     .download-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
     .download-label { font-size: 0.8rem; color: var(--muted); }
 
+    /* ── Wizard ──────────────────────────────────────────────────────────── */
+    .wizard-progress-wrap {
+      height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: .75rem;
+    }
+    .wizard-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .4s ease; }
+    .wizard-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.78rem; color: var(--muted); margin-bottom: .75rem;
+    }
+    .wizard-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    }
+    .wizard-nav-center { font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+    @media (min-width: 640px) {
+      .wizard-nav { left: 50%; transform: translateX(-50%); max-width: 800px;
+        border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+    }
+
+    /* ── Summary ──────────────────────────────────────────────────────────── */
+    .summary-stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; padding: 1rem;
+    }
+    .summary-stat {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--r); padding: .875rem .75rem; text-align: center;
+    }
+    .summary-stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1; }
+    .summary-stat-label { font-size: 0.72rem; color: var(--muted); margin-top: .3rem; text-transform: uppercase; letter-spacing: .05em; }
+    .summary-stat.action  .summary-stat-value { color: var(--accent); }
+    .summary-stat.thought .summary-stat-value { color: var(--green); }
+    .summary-stat.feeling .summary-stat-value { color: var(--yellow); }
+    .summary-atf-list { display: flex; flex-direction: column; gap: .4rem; padding: .25rem 1rem 1rem; }
+    .summary-atf-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: .6rem .875rem; }
+    .summary-atf-text   { font-size: .875rem; }
+    .summary-atf-source { font-size: .72rem; color: var(--muted); font-family: var(--mono); margin-top: .2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     /* ── Sticky action bar ────────────────────────────────────────────────── */
     .action-bar {
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
@@ -401,6 +440,8 @@ const webgpuNoticeVis = signal(!hasWebGPU);
 const deleteBannerVis = signal(false);
 const historyEntries  = signal([]);
 const storageInfo     = signal({ pct: 0, text: 'Calculating…', warn: false });
+const appView         = signal('home');   // 'home' | 'wizard' | 'summary'
+const wizardIndex     = signal(0);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STORAGE / HISTORY (localStorage)
@@ -592,14 +633,18 @@ function updateFile(i, patch) {
 
 async function pickDrive() {
   try {
-    const mode   = cfg.value.delete_after_transcription ? 'readwrite' : 'read';
-    const handle = await window.showDirectoryPicker({ mode });
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
     const found  = [];
     await scan(handle, '', found);
     found.sort((a, b) => a.path.localeCompare(b.path));
-    batch(() => { dirHandle.value = handle; files.value = found; });
-    // Auto-transcribe: start immediately if setting enabled, model loaded, and there are pending files
-    if (cfg.value.auto_transcribe && parakeetModel && found.some(f => f.selected && f.status === 'pending')) {
+    batch(() => {
+      dirHandle.value   = handle;
+      files.value       = found;
+      wizardIndex.value = 0;
+      appView.value     = found.length ? 'wizard' : 'home';
+    });
+    // Auto-transcribe: start if setting enabled, model loaded, pending files exist
+    if (found.length && cfg.value.auto_transcribe && parakeetModel && found.some(f => f.selected && f.status === 'pending')) {
       if (cfg.value.delete_after_transcription) deleteBannerVis.value = true;
       else startBatch();
     }
@@ -712,6 +757,32 @@ async function retryFile(i) {
   await transcribeFile(i);
   busy.value = false;
   refreshHistory();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// WIZARD NAVIGATION
+// ══════════════════════════════════════════════════════════════════════════════
+
+function goNext() {
+  const idx = wizardIndex.value;
+  const len = files.value.length;
+  if (idx < len - 1) wizardIndex.value = idx + 1;
+  else appView.value = 'summary';
+}
+
+function goPrev() {
+  if (wizardIndex.value > 0) wizardIndex.value--;
+}
+
+function startNewSession() {
+  batch(() => {
+    appView.value    = 'home';
+    wizardIndex.value = 0;
+    files.value      = [];
+    dirHandle.value  = null;
+    busy.value       = false;
+    deleteBannerVis.value = false;
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1022,6 +1093,125 @@ function FilesPanel() {
 }
 
 
+function WizardView() {
+  const fs  = files.value;
+  const idx = wizardIndex.value;
+  const f   = fs[idx];
+  if (!f) return null;
+  const pct = Math.round(((idx + 1) / fs.length) * 100);
+  return html`
+    <div>
+      <div class="wizard-progress-wrap"><div class="wizard-progress-fill" style=${'width:' + pct + '%'}></div></div>
+      <div class="wizard-meta">
+        <span>Recording ${idx + 1} of ${fs.length}</span>
+        <span>${fmtCardTitle(f.mtime)}</span>
+      </div>
+      <${FileItem} f=${f} i=${idx} />
+    </div>`;
+}
+
+function WizardNav() {
+  const fs     = files.value;
+  const idx    = wizardIndex.value;
+  const f      = fs[idx];
+  const isLast = idx === fs.length - 1;
+  const inProg = f?.status === 'converting' || f?.status === 'transcribing';
+  return html`
+    <div class="wizard-nav">
+      ${idx > 0
+        ? html`<button class="btn btn-ghost" onClick=${goPrev}>← Back</button>`
+        : html`<div></div>`}
+      <span class="wizard-nav-center">${idx + 1} / ${fs.length}</span>
+      <button class=${'btn btn-primary' + (inProg ? ' btn-pulsing' : '')}
+        disabled=${inProg} onClick=${goNext}>
+        ${inProg ? 'Transcribing…' : isLast ? 'Finish →' : 'Next →'}
+      </button>
+    </div>`;
+}
+
+function SummaryPage() {
+  const fs  = files.value;
+  const all = fs.flatMap(f => (f.entries || []).map(e => ({ ...e, filename: f.name })));
+  const byType = t => all.filter(e => e.type === t);
+  const totalWords = fs.reduce((s, f) => s + (f.transcript ? f.transcript.split(/\s+/).filter(Boolean).length : 0), 0);
+
+  const deleteAudio = async () => {
+    if (!confirm('Permanently delete all source audio files from the selected folder? This cannot be undone.')) return;
+    for (const f of files.value) {
+      if (f.handle && !f.deleted) {
+        try { await f.handle.remove(); updateFile(files.value.indexOf(f), { deleted: true }); } catch {}
+      }
+    }
+  };
+
+  const deleteTx = () => {
+    if (!confirm('Remove all transcriptions and entries for this session from your browser? This cannot be undone.')) return;
+    files.value.forEach(f => { if (f.savedId) removeTx(f.savedId); });
+    refreshHistory(); refreshStorage();
+    startNewSession();
+  };
+
+  return html`
+    <div style="display:flex;flex-direction:column;gap:1rem;padding-bottom:2rem">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title">Session complete</div>
+            <div class="panel-meta">${fs.length} recording${fs.length !== 1 ? 's' : ''} · ${totalWords.toLocaleString()} words transcribed</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onClick=${() => { appView.value = 'wizard'; wizardIndex.value = files.value.length - 1; }}>← Review</button>
+        </div>
+        <div class="summary-stats">
+          <div class="summary-stat action">
+            <div class="summary-stat-value">${byType('action').length}</div>
+            <div class="summary-stat-label">Actions</div>
+          </div>
+          <div class="summary-stat thought">
+            <div class="summary-stat-value">${byType('thought').length}</div>
+            <div class="summary-stat-label">Thoughts</div>
+          </div>
+          <div class="summary-stat feeling" style="grid-column:span 1">
+            <div class="summary-stat-value">${byType('feeling').length}</div>
+            <div class="summary-stat-label">Feelings</div>
+          </div>
+          <div class="summary-stat" style="grid-column:span 1">
+            <div class="summary-stat-value">${all.length}</div>
+            <div class="summary-stat-label">Total entries</div>
+          </div>
+        </div>
+      </div>
+
+      ${ATF_TYPES.map(({ type, label }) => {
+        const items = byType(type);
+        if (!items.length) return null;
+        return html`
+          <div class="panel" key=${type}>
+            <div class="panel-head"><div class=${'panel-title atf-label ' + type}>${label}</div></div>
+            <div class="summary-atf-list">
+              ${items.map(e => html`
+                <div class="summary-atf-item" key=${e.id}>
+                  <div class="summary-atf-text">${e.text}</div>
+                  <div class="summary-atf-source">${e.filename}</div>
+                </div>
+              `)}
+            </div>
+          </div>`;
+      })}
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-title">Clean up</div></div>
+        <div style="padding:1rem;display:flex;flex-direction:column;gap:.75rem">
+          <p style="font-size:.875rem;color:var(--muted);line-height:1.65">
+            Your transcriptions and entries are saved in your browser. These options are optional.
+          </p>
+          <button class="btn btn-danger" onClick=${deleteAudio}>Delete source audio files</button>
+          <button class="btn btn-danger" onClick=${deleteTx}>Delete transcriptions from browser</button>
+          <button class="btn btn-ghost" onClick=${startNewSession}>Start new session</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function ModelPanel() {
   if (!modelPanelVis.value) return null;
   const dl   = dlProgress.value;
@@ -1243,20 +1433,27 @@ function App() {
     refreshStorage();
   }, []);
 
+  const view = appView.value;
+
   return html`
     <div id="app" style="display:flex;flex-direction:column">
       <${SettingsDrawer} />
       <${Header} />
       <main>
-        <${ModelPanel} />
-        ${webgpuNoticeVis.value && html`
-          <div class="notice warn inline-notice">
-            <span>WebGPU not available — using WASM mode (~650 MB). Transcription will work but may be slower than with a GPU.</span>
-          </div>
+        ${view === 'home' && html`
+          <${ModelPanel} />
+          ${webgpuNoticeVis.value && html`
+            <div class="notice warn inline-notice">
+              <span>WebGPU not available — using WASM mode (~650 MB). Transcription will work but may be slower.</span>
+            </div>
+          `}
+          <${FilesPanel} />
         `}
-        <${FilesPanel} />
+        ${view === 'wizard'  && html`<${WizardView} />`}
+        ${view === 'summary' && html`<${SummaryPage} />`}
       </main>
-      <${ActionBar} />
+      ${view === 'home'   && html`<${ActionBar} />`}
+      ${view === 'wizard' && html`<${WizardNav} />`}
     </div>`;
 }
 
