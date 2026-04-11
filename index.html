@@ -389,6 +389,9 @@
 </head>
 <body>
 <div id="root"></div>
+<script type="module" src="./src/main.js"></script>
+<!-- original inline script preserved below for reference; remove when stable -->
+<!--
 <script type="module">
 import { h, render } from 'https://esm.sh/preact@10';
 import { useState, useEffect, useRef } from 'https://esm.sh/preact@10/hooks';
@@ -1708,5 +1711,6 @@ window._tj = {
 
 render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
 </script>
+-->
 </body>
 </html>
