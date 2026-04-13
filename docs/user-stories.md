@@ -380,13 +380,15 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 
 ---
 
-### US-30 — Notes: always-visible auto-save textarea
+### US-30 — Notes: always-visible auto-save textarea *(currently hidden)*
 **As an** audio journaller who wants to annotate a transcription,
 **I want** a notes field that is always visible below the transcript and saves automatically as I type,
 **so that** I can write notes without any save/toggle ceremony.
 
+**Status:** Hidden behind `notes_enabled` feature flag (default `false`). All notes data model and auto-save logic is implemented but the textarea and mic button are not rendered unless the flag is enabled.
+
 **Acceptance criteria:**
-- A notes textarea is shown below the transcript on every card that has a completed transcription
+- A notes textarea is shown below the transcript on every card that has a completed transcription (when `notes_enabled` is true)
 - No Notes button, no Save button, no read-only toggle — just a textarea
 - Notes are auto-saved to `localStorage` 800 ms after the user stops typing (debounce)
 - Existing notes are pre-populated when the card renders
@@ -469,22 +471,25 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 **Acceptance criteria:**
 - After selecting a folder, the first recording card fills the content area
 - Only one card is visible at a time — no list view during the wizard
-- Each card shows: recording title (time of day only — e.g. "14:30"), filename, transcription text (or loading state), notes section, ATF entries section
-- A progress indicator (`wizard-meta`) shows current position ("Recording X of N") on the left and the day of the week (e.g. "Wednesday") on the right — not the full day + time combination
-- A thin progress fill bar shows percentage completion across all cards
+- Each card shows: recording title (time of day only — e.g. "14:30"), filename, transcription text (or loading state), and existing ATF entry chips
+- The ATF entry input row (type selector, text input, mic button, Add button) is in the sticky bottom nav bar above the Complete button
+- A progress indicator (`wizard-meta`) shows current overall position ("Recording X of N") on the left and the day of the week (e.g. "Wednesday") on the right — both X and N are computed from all non-deleted files (including completed), so the progress always increases
+- A thin progress fill bar shows percentage of completed recordings out of total recordings — this value only increases as the user moves forward
 
 ---
 
 ### US-36 — Navigate between recordings
 **As an** audio journaller working through my entries,
-**I want** Previous and Next buttons to move between recording cards,
+**I want** Back and Complete buttons to move between recording cards,
 **so that** I can work through them at my own pace and revisit earlier ones.
 
 **Acceptance criteria:**
-- Previous button is hidden on the first card; Next button is hidden on the last card (replaced by "Finish")
-- Previous and Next are always visible and tappable (not inside a scroll area)
+- Back button is hidden on the first card
+- Complete button is always visible and centered in the sticky bottom nav bar
+- Pressing Complete marks the current recording as done and moves to the next; on the final card it navigates to the summary
 - Navigating away and back preserves all notes and ATF entries entered for a card
-- If the current card is still transcribing, Next is disabled with a "Transcribing…" label
+- If the current card is still transcribing, Complete is disabled with a "Transcribing…" label
+- No "X / Y" entry counter is shown in the sticky nav bar (progress is visible in the wizard-meta area and progress bar above the card)
 
 ---
 
@@ -619,6 +624,18 @@ The original user stories (Epics 1–11) were written for an earlier DJI-specifi
 - A clear confirmation dialog explains this is irreversible
 - Only files for which transcription succeeded are eligible for deletion
 - The button is absent if the folder was opened in read-only mode
+
+---
+
+### US-50 — Start new session clears resume button
+**As an** audio journaller who clicks "Start new session" from the summary page,
+**I want** the home screen to show no "Resume" button,
+**so that** I am not prompted to resume a session I have intentionally ended.
+
+**Acceptance criteria:**
+- Clicking "Start new session" marks all in-session files as completed in `localStorage`
+- The `historyEntries` signal is refreshed immediately, so the "Resume (N)" button does not appear on the home screen after returning
+- If a genuinely incomplete session exists from a different prior session it will still appear (this is correct behaviour)
 
 ---
 

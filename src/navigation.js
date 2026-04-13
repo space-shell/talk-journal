@@ -1,6 +1,6 @@
 import { batch } from './lib.js';
 import { files, appView, wizardIndex, dirHandle, busy, deleteBannerVis, updateFile } from './signals.js';
-import { updateTx, allTx } from './storage.js';
+import { updateTx, allTx, refreshHistory } from './storage.js';
 
 export function activeFiles() {
   return files.value.filter(f => !f.completed && !f.deleted && f.status !== 'cleared');
@@ -27,6 +27,10 @@ export function goPrev() {
 }
 
 export function startNewSession() {
+  // Mark any in-session files that weren't explicitly completed
+  files.value.forEach(f => {
+    if (!f.completed && f.savedId) updateTx(f.savedId, { completed: true });
+  });
   batch(() => {
     appView.value         = 'home';
     wizardIndex.value     = 0;
@@ -35,6 +39,7 @@ export function startNewSession() {
     busy.value            = false;
     deleteBannerVis.value = false;
   });
+  refreshHistory();
 }
 
 export function resumeSession() {

@@ -23,6 +23,7 @@ export const DEFAULTS = {
   delete_after_transcription: false,
   auto_save:                  true,
   auto_transcribe:            true,
+  notes_enabled:              false,
   notion_api_key:             '',
   notion_target_id:           '',
   obsidian_vault_name:        '',

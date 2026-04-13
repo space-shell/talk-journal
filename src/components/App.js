@@ -26,7 +26,7 @@ export function App() {
     <div id="app" style="display:flex;flex-direction:column">
       <${SettingsDrawer} />
       <${Header} />
-      <main>
+      <main style=${{paddingBottom: view === 'wizard' ? '140px' : '80px'}}>
         ${view === 'home' && html`
           <${ModelPanel} />
           ${webgpuNoticeVis.value && html`

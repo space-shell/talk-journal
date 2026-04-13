@@ -112,20 +112,22 @@ export function FileItem({ f, i }) {
           ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}
           <button class="btn btn-danger btn-sm" style="margin-left:auto" onClick=${onDelete}>Delete</button>
         </div>
-        <textarea class="notes-area" placeholder="Notes…" rows="3"
-          value=${notesDraft} onInput=${onNotesChange}
-        ></textarea>
-        <div class="notes-footer" style="justify-content:flex-end">
-          <button class="btn btn-ghost btn-sm" data-mic
-            disabled=${!parakeetModel || micBusy}
-            title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Speak a note'}
-            onClick=${toggleRecording}>
-            ${micBusy ? 'Transcribing…' : recording
-              ? html`<${IconMicActive} /> Stop`
-              : html`<${IconMic} />`}
-          </button>
-        </div>
-        <${AtfInput} fileEntries=${f.entries || []} fileIndex=${i} />
+        ${c.notes_enabled && html`
+          <textarea class="notes-area" placeholder="Notes…" rows="3"
+            value=${notesDraft} onInput=${onNotesChange}
+          ></textarea>
+          <div class="notes-footer" style="justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" data-mic
+              disabled=${!parakeetModel || micBusy}
+              title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Speak a note'}
+              onClick=${toggleRecording}>
+              ${micBusy ? 'Transcribing…' : recording
+                ? html`<${IconMicActive} /> Stop`
+                : html`<${IconMic} />`}
+            </button>
+          </div>
+        `}
+        <${AtfInput} fileEntries=${f.entries || []} fileIndex=${i} showInput=${false} />
       `}
       ${f.error && html`
         <div class="error-msg">

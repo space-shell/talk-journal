@@ -15,7 +15,7 @@ function saveFileEntries(i, entries) {
 
 const randomAtfType = () => ATF_TYPES[Math.floor(Math.random() * ATF_TYPES.length)].type;
 
-export function AtfInput({ fileEntries, fileIndex }) {
+export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput = true }) {
   const [draft,   setDraft]   = useState('');
   const [type,    setType]    = useState(randomAtfType);
   const [atfRec,  setAtfRec]  = useState(false);
@@ -60,7 +60,7 @@ export function AtfInput({ fileEntries, fileIndex }) {
 
   return html`
     <div class="atf-section">
-      ${ATF_TYPES.map(({ type: t, label }) => {
+      ${showChips && ATF_TYPES.map(({ type: t, label }) => {
         const items = fileEntries.filter(e => e.type === t);
         if (!items.length) return null;
         return html`
@@ -74,22 +74,24 @@ export function AtfInput({ fileEntries, fileIndex }) {
             `)}
           </div>`;
       })}
-      <div class="atf-add-row">
-        <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
-          ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
-        </select>
-        <input class="atf-input" type="text" placeholder=${placeholder}
-          maxlength=${ATF_MAX} value=${draft}
-          onInput=${e => setDraft(e.target.value)}
-          onKeyDown=${onKey} />
-        <button class="btn btn-ghost btn-sm" data-mic
-          disabled=${!parakeetModel || atfBusy}
-          title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
-          onClick=${toggleAtfMic}>
-          ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
-        </button>
-        <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
-      </div>
-      ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
+      ${showInput && html`
+        <div class="atf-add-row">
+          <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
+            ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
+          </select>
+          <input class="atf-input" type="text" placeholder=${placeholder}
+            maxlength=${ATF_MAX} value=${draft}
+            onInput=${e => setDraft(e.target.value)}
+            onKeyDown=${onKey} />
+          <button class="btn btn-ghost btn-sm" data-mic
+            disabled=${!parakeetModel || atfBusy}
+            title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
+            onClick=${toggleAtfMic}>
+            ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
+          </button>
+          <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
+        </div>
+        ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
+      `}
     </div>`;
 }
