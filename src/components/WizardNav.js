@@ -1,20 +1,17 @@
 import { html } from '../lib.js';
 import { files, wizardIndex } from '../signals.js';
-import { goNext, goPrev, activeFiles } from '../navigation.js';
+import { goNext, goPrev } from '../navigation.js';
 import { AtfInput } from './AtfInput.js';
 
 export function WizardNav() {
-  const fs       = files.value;
-  const activeFs = activeFiles();
-  const idx      = wizardIndex.value;
-  const f        = activeFs[idx];
-  const realIdx  = fs.indexOf(f);
-  const inProg   = f?.status === 'converting' || f?.status === 'transcribing';
+  const idx    = wizardIndex.value;
+  const f      = files.value[idx];
+  const inProg = f?.status === 'converting' || f?.status === 'transcribing';
   const hasTranscript = f?.transcript !== null && f?.transcript !== undefined;
   return html`
     <div class="wizard-nav">
       ${hasTranscript && html`
-        <${AtfInput} fileEntries=${f?.entries || []} fileIndex=${realIdx} showChips=${false} />
+        <${AtfInput} fileEntries=${f?.entries || []} fileIndex=${idx} showChips=${false} />
       `}
       <div class="wizard-nav-buttons">
         <div class="wizard-nav-side">

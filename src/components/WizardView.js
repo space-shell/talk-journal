@@ -1,16 +1,13 @@
 import { html } from '../lib.js';
 import { files, wizardIndex } from '../signals.js';
-import { activeFiles } from '../navigation.js';
 import { fmtDay } from '../helpers.js';
 import { FileItem } from './FileItem.js';
 
 export function WizardView() {
   const fs           = files.value;
-  const activeFs     = activeFiles();
   const idx          = wizardIndex.value;
-  const f            = activeFs[idx];
+  const f            = fs[idx];
   if (!f) return null;
-  const realIdx      = fs.indexOf(f);
   // Progress based on all reviewable files (including completed), so it only increases
   const reviewable   = fs.filter(x => !x.deleted && x.status !== 'cleared');
   const completedCnt = reviewable.filter(x => x.completed).length;
@@ -24,6 +21,6 @@ export function WizardView() {
         <span>Recording ${overallPos + 1} of ${totalCnt}</span>
         <span>${fmtDay(f.mtime)}</span>
       </div>
-      <${FileItem} key=${realIdx} f=${f} i=${realIdx} />
+      <${FileItem} key=${idx} f=${f} i=${idx} />
     </div>`;
 }

@@ -7,19 +7,21 @@ export function activeFiles() {
 }
 
 export function goNext() {
-  const active  = activeFiles();
-  const idx     = wizardIndex.value;
-  const f       = active[idx];
-  // Mark current entry complete
-  if (f) {
-    const realIdx = files.value.indexOf(f);
-    updateFile(realIdx, { completed: true });
+  const idx = wizardIndex.value;
+  const fs  = files.value;
+  const f   = fs[idx];
+  // Mark current file complete if it isn't already
+  if (f && !f.completed) {
+    updateFile(idx, { completed: true });
     if (f.savedId) updateTx(f.savedId, { completed: true });
   }
-  // Re-check remaining (signal updated synchronously above)
-  const remaining = files.value.filter(x => !x.completed && !x.deleted && x.status !== 'cleared');
-  if (remaining.length === 0 || idx >= remaining.length) appView.value = 'summary';
-  // else: wizardIndex stays at idx — the next file slides into that slot
+  // Find next reviewable incomplete file after current position
+  const nextIdx = fs.findIndex((x, i) => i > idx && !x.completed && !x.deleted && x.status !== 'cleared');
+  if (nextIdx === -1) {
+    appView.value = 'summary';
+  } else {
+    wizardIndex.value = nextIdx;
+  }
 }
 
 export function goPrev() {
