@@ -5,9 +5,9 @@ export const AUDIO_EXTS = /\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac)$/i;
 
 export const ATF_MAX   = 160;
 export const ATF_TYPES = [
-  { type: 'action',  label: 'Actions',  placeholder: 'Something to do…' },
-  { type: 'thought', label: 'Thoughts', placeholder: 'An insight or reflection…' },
-  { type: 'feeling', label: 'Feelings', placeholder: 'An emotional state…' },
+  { type: 'action',  label: 'Actions',  placeholder: 'You…' },
+  { type: 'thought', label: 'Thoughts', placeholder: 'You think…' },
+  { type: 'feeling', label: 'Feelings', placeholder: 'You feel…' },
 ];
 
 export const NOSTR_APP_TAG    = 'tibbs';

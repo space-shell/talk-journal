@@ -33,6 +33,12 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
   };
 
   const remove = id => saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
+
+  const edit = entry => {
+    setType(entry.type);
+    setDraft(entry.text);
+    saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== entry.id));
+  };
   const onKey  = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
   const placeholder = ATF_TYPES.find(a => a.type === type)?.placeholder || '';
 
@@ -69,6 +75,7 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
             ${items.map(e => html`
               <div class="atf-chip" key=${e.id}>
                 <span>${e.text}</span>
+                <button onClick=${() => edit(e)} title="Edit" aria-label="Edit entry" class="atf-chip-edit">✎</button>
                 <button onClick=${() => remove(e.id)} title="Remove" aria-label="Remove entry">×</button>
               </div>
             `)}

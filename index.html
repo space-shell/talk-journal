@@ -289,7 +289,10 @@
       opacity: .5; transition: opacity .15s;
     }
     .atf-chip button:hover { opacity: 1; color: var(--red); }
+    .atf-chip button.atf-chip-edit:hover { color: var(--accent); }
     .atf-add-row { display: flex; gap: 0.4rem; align-items: stretch; }
+    .atf-actions { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; }
+    .atf-trans-select { display: flex; gap: 0.4rem; align-items: stretch; }
     .atf-input {
       flex: 1; background: var(--surface2); border: 1px solid var(--border);
       border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.85rem;
@@ -1152,20 +1155,27 @@ function AtfInput({ fileEntries, fileIndex }) {
           </div>`;
       })}
       <div class="atf-add-row">
-        <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
-          ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
-        </select>
         <input class="atf-input" type="text" placeholder=${placeholder}
           maxlength=${ATF_MAX} value=${draft}
           onInput=${e => setDraft(e.target.value)}
           onKeyDown=${onKey} />
-        <button class="btn btn-ghost btn-sm" data-mic
-          disabled=${!parakeetModel || atfBusy}
-          title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
-          onClick=${toggleAtfMic}>
-          ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
-        </button>
-        <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
+
+        <div class="atf-actions">
+          <div class="atf-trans-select">
+            <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
+              ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
+            </select>
+
+            <button class="btn btn-ghost btn-sm" data-mic
+              disabled=${!parakeetModel || atfBusy}
+              title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
+              onClick=${toggleAtfMic}>
+              ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
+            </button>
+          </div>
+
+          <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
+        </div>
       </div>
       ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
     </div>`;
