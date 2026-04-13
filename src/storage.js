@@ -7,10 +7,18 @@ export function getIndex() {
   catch { return []; }
 }
 
+// Nostr sync hooks — set by nostr-sync.js to push changes to relays
+let _saveHook = null, _updateHook = null, _hooksSuppressed = false;
+export function setStorageHooks({ onSave, onUpdate }) { _saveHook = onSave; _updateHook = onUpdate; }
+export function suppressHooks()  { _hooksSuppressed = true; }
+export function resumeHooks()    { _hooksSuppressed = false; }
+
 export function saveTx(entry) {
-  const idx = getIndex(); idx.unshift(entry.id);
+  const idx = getIndex();
+  if (!idx.includes(entry.id)) idx.unshift(entry.id);
   localStorage.setItem(TX_INDEX, JSON.stringify(idx));
   localStorage.setItem(`${TX_PREFIX}${entry.id}`, JSON.stringify(entry));
+  if (!_hooksSuppressed) _saveHook?.(entry);
 }
 
 export function getTx(id) {
@@ -20,7 +28,9 @@ export function getTx(id) {
 
 export function updateTx(id, patch) {
   const entry = getTx(id); if (!entry) return;
-  localStorage.setItem(`${TX_PREFIX}${id}`, JSON.stringify({ ...entry, ...patch }));
+  const merged = { ...entry, ...patch };
+  localStorage.setItem(`${TX_PREFIX}${id}`, JSON.stringify(merged));
+  if (!_hooksSuppressed) _updateHook?.(merged);
 }
 
 export function removeTx(id) {

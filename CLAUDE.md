@@ -19,8 +19,9 @@ Transcription runs entirely in the browser using **parakeet.js** (Parakeet TDT 0
 
 ## Tech Stack & Constraints
 
-- **Single file**: Everything in `index.html` — embedded `<style>` and `<script type="module">`, no build step
-- **ES module**: `<script type="module">` required to import parakeet.js via esm.sh
+- **Build-less**: No bundler or build step — the browser loads ES modules directly via `<script type="module" src="./src/main.js">`
+- **Multi-file ES modules**: JavaScript is split into `src/` modules with native browser ESM imports; CSS stays embedded in `index.html`
+- **ES module**: `type="module"` required to import parakeet.js via esm.sh
 - **Chromium-only**: File System Access API + WebGPU are not supported in Firefox/Safari — detected on load, warning shown
 - **No backend, no API**: All transcription is local. Only outbound request is the one-time model download
 
@@ -32,7 +33,46 @@ Transcription runs entirely in the browser using **parakeet.js** (Parakeet TDT 0
 
 ## Architecture
 
-UI sections:
+### File structure
+
+```
+index.html                    HTML skeleton + all CSS; loads ./src/main.js
+src/
+  lib.js                      Vendor re-exports: preact, @preact/signals, htm → exports html tagged template
+  config.js                   Constants: DEFAULTS, ATF_TYPES, TX_PREFIX, MODEL_KEY, AUDIO_EXTS, ATF_MAX
+  compat.js                   Browser capability checks: hasFilePicker, hasWebGPU, hasSimd
+  helpers.js                  Pure formatting utils + genId
+  signals.js                  All Preact signals + updateFile() helper
+  storage.js                  localStorage CRUD: saveTx/getTx/updateTx/removeTx + refreshHistory/refreshStorage/clearHistory
+  audio.js                    prepareAudio() + removeSilence() (RMS VAD)
+  engine.js                   Parakeet inference: worker, txQueue, loadParakeet, runParakeet
+                                - exports parakeetModel/parakeetWorker as live ESM bindings
+                                - setParakeetModel() setter for test hooks
+  model.js                    checkModelStatus(), downloadModel() — imports from both engine.js and transcription.js
+                                (kept separate from engine.js to avoid circular dependency)
+  fs-handles.js               IndexedDB folder handle persistence (saveHandle/loadHandle)
+  transcription.js            requestBatch(), startBatch(), transcribeFile(), retryFile()
+  drive.js                    pickDrive(), scan(), tryAutoReconnect()
+  navigation.js               goNext(), goPrev(), startNewSession()
+  share.js                    exportAll(), shareAll(), sendToNotion(), sendToObsidian()
+  main.js                     Entry point: window._tj test hooks, render()
+  components/
+    icons.js                  SVG icon components
+    AtfInput.js               ATF entry input + mic dictation
+    FileItem.js               Single recording card (transcript, notes, ATF)
+    WizardView.js / WizardNav.js
+    FilesPanel.js / ModelPanel.js / Header.js / ActionBar.js
+    SummaryPage.js / SettingsDrawer.js
+    App.js / CompatWarning.js
+```
+
+### Key dependency rules
+
+- `engine.js` never imports from `transcription.js` or `model.js` — this prevents a circular dependency
+- `updateFile()` lives in `signals.js` (not `drive.js`) so both `transcription.js` and components can import it without cycles
+- `model.js` is the only module that imports from both `engine.js` and `transcription.js`
+
+### UI sections
 1. **Header** — model status indicator, settings gear
 2. **Wizard** — one recording card at a time; transcription, notes, ATF entries, Previous/Next navigation
 3. **Summary** — statistics and full ATF entry review after all cards are completed
@@ -42,7 +82,7 @@ UI sections:
 
 State flow: select folder → scan audio files → transcribe (background, auto if model ready) → wizard review → summary → optional cleanup.
 
-> **Worker status**: Transcription now runs in a dedicated Web Worker (`initParakeetWorker`). The worker is created from an inline Blob URL with `{ type: 'module' }` so no separate file is needed. Audio is transferred via `ArrayBuffer` transfer (zero-copy; SharedArrayBuffer is NOT required). If the Worker fails to initialise (e.g. the library uses `window` APIs incompatible with worker scope), `loadParakeet` catches the error and falls back to main-thread execution silently. All inference — whether worker or fallback — is serialised through the shared `txQueue`.
+> **Worker status**: Transcription runs in a dedicated Web Worker (created from an inline Blob URL in `engine.js` with `{ type: 'module' }`). Audio is transferred via `ArrayBuffer` transfer (zero-copy; SharedArrayBuffer is NOT required). If the Worker fails to initialise, `loadParakeet` catches the error and falls back to main-thread execution silently. All inference — whether worker or fallback — is serialised through the shared `txQueue` in `engine.js`.
 
 ## Audio Pipeline
 
@@ -67,14 +107,14 @@ Supported input formats: any format decodable by `AudioContext.decodeAudioData()
 
 ### Transcription Queue & Worker
 
-All parakeet inference goes through `runParakeet(float32, priority?)` which wraps every call in `runQueued()`. Only one inference runs at a time.
+All parakeet inference goes through `runParakeet(float32, priority?)` in `src/engine.js`, which wraps every call in `runQueued()`. Only one inference runs at a time.
 
 - **`txQueue`** — array of pending jobs `{ fn, resolve, reject }`. `priority=true` puts a job at the front (mic buttons use this so user-triggered dictation isn't blocked behind a long file batch).
 - **`drainTxQueue()`** — picks one job, sets `txRunning=true`, awaits it, then recurses. Never concurrent.
 - **Worker path** (`parakeetWorker` non-null): `Float32Array.buffer` is transferred (zero-copy) to the worker via `postMessage`. Response arrives as `{ type: 'result', id, text }` matched by job ID in `workerPending`.
 - **Fallback path** (`parakeetWorker` null, `parakeetModel` is a model object): calls `parakeetModel.transcribeLongAudio()` directly on the main thread.
 - **`parakeetModel`** is `null` when not loaded, `true` (sentinel) when worker is active, or a model object when using fallback.
-- **`_tj.parakeetWorker`** exposes the worker for debugging. Setting `_tj.parakeetModel = null` in tests also nulls `parakeetWorker` to ensure button disabled-state tests behave correctly.
+- **`parakeetModel` / `parakeetWorker`** are exported as live ESM bindings from `engine.js`. `setParakeetModel(v)` is the setter — nulling it also clears the worker reference. Test hook `_tj.parakeetModel = null` calls this setter so button disabled-state tests behave correctly.
 
 ## Key Settings (`localStorage` key: `tj_cfg`)
 

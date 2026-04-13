@@ -2,6 +2,9 @@ import { html, useState, useEffect } from '../lib.js';
 import { DEFAULTS } from '../config.js';
 import { cfg, settingsOpen, storageInfo } from '../signals.js';
 import { clearHistory } from '../storage.js';
+import { nostrStatus, syncNow, autoSync } from '../nostr-sync.js';
+import { loadNsec, saveNsec, clearPrivkey, generateKeypair, npubFromNsec } from '../nostr-keys.js';
+import { loadRelays, saveRelays, relayStatuses, connectRelays } from '../nostr-relay.js';
 import { IconX } from './icons.js';
 
 export function SettingsDrawer() {
@@ -19,7 +22,19 @@ export function SettingsDrawer() {
   const [notionKey, setNotionKey] = useState(c.notion_api_key);
   const [notionId,  setNotionId]  = useState(c.notion_target_id);
   const [obsidian,  setObsidian]  = useState(c.obsidian_vault_name);
+  const [nsecInput,   setNsecInput]   = useState(() => loadNsec());
+  const [relaysInput, setRelaysInput] = useState(() => loadRelays().join('\n'));
   const si = storageInfo.value;
+  const ns = nostrStatus.value;
+  const rsMap = relayStatuses.value;
+
+  let npubDisplay = '';
+  try { if (nsecInput) npubDisplay = npubFromNsec(nsecInput); } catch {}
+
+  const doGenerate = () => {
+    const kp = generateKeypair();
+    setNsecInput(kp.nsec);
+  };
 
   // Reset draft when drawer opens
   useEffect(() => {
@@ -29,6 +44,7 @@ export function SettingsDrawer() {
     setPad(c.vad_padding_ms); setSilGap(c.vad_min_silence_ms); setAutoSave(c.auto_save);
     setAutoTx(c.auto_transcribe); setDelAfter(c.delete_after_transcription); setNotionKey(c.notion_api_key);
     setNotionId(c.notion_target_id); setObsidian(c.obsidian_vault_name);
+    setNsecInput(loadNsec()); setRelaysInput(loadRelays().join('\n'));
   }, [open]);
 
   const save = () => {
@@ -51,6 +67,17 @@ export function SettingsDrawer() {
     }
     cfg.value = newCfg;
     localStorage.setItem('tj_cfg', JSON.stringify(newCfg));
+
+    // Save Nostr settings
+    const urls = relaysInput.split('\n').map(s => s.trim()).filter(Boolean);
+    saveRelays(urls);
+    if (nsecInput) {
+      try { saveNsec(nsecInput); } catch { alert('Invalid nsec — Nostr settings not saved.'); return; }
+    } else {
+      clearPrivkey();
+    }
+    if (nsecInput && urls.length) { connectRelays(urls); autoSync(); }
+
     settingsOpen.value = false;
   };
 
@@ -135,6 +162,57 @@ export function SettingsDrawer() {
 
         <div class="section-label">Connectors — Coming Soon</div>
         <p class="hint" style="padding-bottom:.25rem">Claude · ChatGPT · Custom Webhook</p>
+
+        <div class="section-label">Sync — Nostr</div>
+        <p class="hint">End-to-end encrypted cross-device sync via Nostr relays. Your private key never leaves your devices — all data is encrypted with NIP-44 before being published.</p>
+        ${nsecInput && html`<p class="hint" style="color:var(--warn,#c97a00);margin-bottom:.5rem">Your <strong>nsec</strong> is stored in plain text in this browser's localStorage. Only use Nostr sync on devices you trust.</p>`}
+
+        <div class="field">
+          <label>Private Key (nsec)</label>
+          <div style="display:flex;gap:.5rem">
+            <input type="password" placeholder="nsec1…" value=${nsecInput}
+              onInput=${e => setNsecInput(e.target.value)}
+              style="flex:1;font-family:monospace;font-size:.8rem" />
+            <button type="button" class="btn btn-sm" onClick=${doGenerate} style="white-space:nowrap">Generate</button>
+          </div>
+          <span class="hint">Paste an existing nsec or click Generate to create a new identity. Keep a copy — it cannot be recovered.</span>
+        </div>
+
+        ${npubDisplay && html`
+          <div class="field">
+            <label>Public Key (npub)</label>
+            <input type="text" readonly value=${npubDisplay} style="font-family:monospace;font-size:.75rem;color:var(--text-muted,#888)" />
+          </div>
+        `}
+
+        <div class="field">
+          <label>Relay URLs</label>
+          <textarea rows="3" placeholder="wss://relay.damus.io${'\n'}wss://nos.lol"
+            value=${relaysInput} onInput=${e => setRelaysInput(e.target.value)}
+            style="font-family:monospace;font-size:.8rem;resize:vertical" />
+          <span class="hint">One relay per line. Changes take effect after saving.</span>
+        </div>
+
+        ${[...rsMap.entries()].length > 0 && html`
+          <div style="display:flex;flex-direction:column;gap:.25rem;margin-bottom:.5rem">
+            ${[...rsMap.entries()].map(([url, status]) => html`
+              <div style="display:flex;align-items:center;gap:.4rem;font-size:.8rem">
+                <span style=${'width:8px;height:8px;border-radius:50%;background:' + (status === 'open' ? '#22c55e' : status === 'error' ? '#ef4444' : '#f59e0b')}></span>
+                <span style="color:var(--text-muted,#888);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${url}</span>
+                <span style="margin-left:auto;color:var(--text-muted,#888)">${status}</span>
+              </div>
+            `)}
+          </div>
+        `}
+
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.25rem">
+          <button type="button" class="btn btn-sm" onClick=${syncNow}
+            disabled=${ns.state === 'syncing'}>
+            ${ns.state === 'syncing' ? 'Syncing…' : 'Sync Now'}
+          </button>
+          ${ns.lastSync && html`<span class="hint" style="margin:0">Last synced: ${new Date(ns.lastSync).toLocaleString()}</span>`}
+          ${ns.error && html`<span class="hint" style="color:#ef4444;margin:0">${ns.error}</span>`}
+        </div>
 
         <button class="btn btn-primary" onClick=${save}>Save Settings</button>
       </div>

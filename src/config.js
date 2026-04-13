@@ -10,6 +10,10 @@ export const ATF_TYPES = [
   { type: 'feeling', label: 'Feelings', placeholder: 'An emotional state…' },
 ];
 
+export const NOSTR_APP_TAG    = 'tibbs';
+export const NOSTR_D_PREFIX   = 'tibbs:entry:';
+export const NOSTR_SETTINGS_D = 'tibbs:settings';
+
 export const DEFAULTS = {
   language:                   'en',
   vad_enabled:                true,

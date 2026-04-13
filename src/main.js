@@ -4,6 +4,7 @@ import { files, cfg, busy, historyEntries, appView, wizardIndex } from './signal
 import { parakeetModel, parakeetWorker, setParakeetModel } from './engine.js';
 import { App } from './components/App.js';
 import { CompatWarning } from './components/CompatWarning.js';
+import { autoSync } from './nostr-sync.js';
 
 // Test hooks — used by tests/notes-features.test.js
 window._tj = {
@@ -14,3 +15,4 @@ window._tj = {
 };
 
 render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
+autoSync();
