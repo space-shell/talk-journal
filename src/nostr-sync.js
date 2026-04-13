@@ -2,8 +2,14 @@ import { signal } from './lib.js';
 import { NOSTR_D_PREFIX } from './config.js';
 import { loadPrivkey, pubkeyFromPrivkey } from './nostr-keys.js';
 import { buildEntryEvent, decodeEntryEvent, getDTag } from './nostr-events.js';
-import { publishEvent, fetchEntries, connectRelays, loadRelays } from './nostr-relay.js';
+import { publishEvent as _publishEventReal, fetchEntries as _fetchEntriesReal, connectRelays, loadRelays } from './nostr-relay.js';
 import { getTx, saveTx, updateTx, suppressHooks, resumeHooks, refreshHistory, setStorageHooks } from './storage.js';
+
+// Overrideable for testing — use setPublishEvent / setFetchEntries via _tj.nostr
+let _publishEvent = _publishEventReal;
+let _fetchEntries = _fetchEntriesReal;
+export function setPublishEvent(fn) { _publishEvent = fn ?? _publishEventReal; }
+export function setFetchEntries(fn) { _fetchEntries = fn ?? _fetchEntriesReal; }
 
 const PENDING_KEY   = 'tj_nostr_pending';   // JSON array of entry IDs awaiting publish
 const LAST_SYNC_KEY = 'tj_nostr_last_sync';
@@ -22,7 +28,7 @@ export async function pushEntry(entry) {
   const privkey = loadPrivkey();
   if (!privkey || !entry) return;
   try {
-    const results = await publishEvent(buildEntryEvent(entry, privkey));
+    const results = await _publishEvent(buildEntryEvent(entry, privkey));
     if (results.length && results.every(r => r.ok)) removePending(entry.id);
     else addPending(entry.id);
   } catch {
@@ -44,7 +50,7 @@ export async function pullAll() {
   if (!privkey) return;
   nostrStatus.value = { ...nostrStatus.value, state: 'syncing', error: null };
   try {
-    const events = await fetchEntries(pubkeyFromPrivkey(privkey));
+    const events = await _fetchEntries(pubkeyFromPrivkey(privkey));
     suppressHooks();
     try {
       for (const event of events) {

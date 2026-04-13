@@ -34,6 +34,13 @@ export function SettingsDrawer() {
   const doGenerate = () => {
     const kp = generateKeypair();
     setNsecInput(kp.nsec);
+    saveNsec(kp.nsec);
+  };
+
+  const onNsecBlur = e => {
+    const val = e.target.value.trim();
+    if (!val) { clearPrivkey(); return; }
+    try { saveNsec(val); } catch { /* invalid — leave as-is, save button will alert */ }
   };
 
   // Reset draft when drawer opens
@@ -172,6 +179,7 @@ export function SettingsDrawer() {
           <div style="display:flex;gap:.5rem">
             <input type="password" placeholder="nsec1…" value=${nsecInput}
               onInput=${e => setNsecInput(e.target.value)}
+              onBlur=${onNsecBlur}
               style="flex:1;font-family:monospace;font-size:.8rem" />
             <button type="button" class="btn btn-sm" onClick=${doGenerate} style="white-space:nowrap">Generate</button>
           </div>
