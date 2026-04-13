@@ -131,6 +131,7 @@ export function FileItem({ f, i }) {
         <div class="error-msg">
           <span>${f.error}</span>
           <button class="btn btn-ghost btn-sm" onClick=${() => retryFile(i)}>Retry</button>
+          <button class="btn btn-danger btn-sm" onClick=${onDelete}>Delete</button>
         </div>
       `}
     </div>`;

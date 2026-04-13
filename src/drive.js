@@ -40,9 +40,10 @@ export async function scan(handle, prefix, found) {
         status:     existing ? 'done'               : 'pending',
         transcript: existing ? existing.text        : null,
         savedId:    existing ? existing.id          : null,
-        deleted:    existing ? (existing.deleted ?? false) : false,
-        notes:      existing ? (existing.notes   || '')  : '',
-        entries:    existing ? (existing.entries || [])  : [],
+        deleted:    existing ? (existing.deleted   ?? false) : false,
+        completed:  existing ? (existing.completed ?? false) : false,
+        notes:      existing ? (existing.notes     || '')    : '',
+        entries:    existing ? (existing.entries   || [])    : [],
         error: null,
       });
     } else if (entry.kind === 'directory') {
