@@ -10,6 +10,9 @@ import { loadPrivkey, loadNsec, saveNsec, clearPrivkey, generateKeypair, npubFro
 import { loadRelays, saveRelays, relayStatuses, connectRelays } from './nostr-relay.js';
 import { buildEntryEvent, buildSettingsEvent, decodeEntryEvent, getDTag } from './nostr-events.js';
 import { NOSTR_D_PREFIX, NOSTR_APP_TAG, NOSTR_SETTINGS_D } from './config.js';
+import { checkModelStatus } from './model.js';
+import { refreshHistory, refreshStorage } from './storage.js';
+import { tryAutoReconnect } from './drive.js';
 
 // Test hooks — used by tests/notes-features.test.js and tests/nostr-sync.test.js
 window._tj = {
@@ -36,6 +39,11 @@ window._tj = {
     NOSTR_D_PREFIX, NOSTR_APP_TAG, NOSTR_SETTINGS_D,
   },
 };
+
+checkModelStatus();
+refreshHistory();
+refreshStorage();
+tryAutoReconnect();
 
 render(hasFilePicker ? html`<${App} />` : html`<${CompatWarning} />`, document.getElementById('root'));
 autoSync();

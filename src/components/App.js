@@ -1,8 +1,5 @@
-import { html, useEffect } from '../lib.js';
+import { html } from '../lib.js';
 import { appView, webgpuNoticeVis } from '../signals.js';
-import { checkModelStatus } from '../model.js';
-import { refreshHistory, refreshStorage } from '../storage.js';
-import { tryAutoReconnect } from '../drive.js';
 import { SettingsDrawer } from './SettingsDrawer.js';
 import { Header } from './Header.js';
 import { ModelPanel } from './ModelPanel.js';
@@ -13,13 +10,6 @@ import { SummaryPage } from './SummaryPage.js';
 import { ActionBar } from './ActionBar.js';
 
 export function App() {
-  useEffect(() => {
-    checkModelStatus();
-    refreshHistory();
-    refreshStorage();
-    tryAutoReconnect();
-  }, []);
-
   const view = appView.value;
 
   return html`
