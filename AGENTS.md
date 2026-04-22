@@ -42,7 +42,7 @@ src/
   config.js                   Constants: DEFAULTS, ATF_TYPES, TX_PREFIX, MODEL_KEY, AUDIO_EXTS, ATF_MAX
   compat.js                   Browser capability checks: hasFilePicker, hasWebGPU, hasSimd
   helpers.js                  Pure formatting utils + genId
-  signals.js                  All Preact signals + updateFile() helper
+  signals.js                  All Preact signals + updateFile() helper; includes atfEditEntry for cross-instance ATF editing
   storage.js                  localStorage CRUD: saveTx/getTx/updateTx/removeTx + refreshHistory/refreshStorage/clearHistory
   audio.js                    prepareAudio() + removeSilence() (RMS VAD)
   engine.js                   Parakeet inference: worker, txQueue, loadParakeet, runParakeet
@@ -58,7 +58,7 @@ src/
   main.js                     Entry point: window._tj test hooks, render()
   components/
     icons.js                  SVG icon components
-    AtfInput.js               ATF entry input + mic dictation
+    AtfInput.js               ATF entry input, chips display, and edit flow via shared atfEditEntry signal
     FileItem.js               Single recording card (transcript, notes, ATF)
     WizardView.js / WizardNav.js
     FilesPanel.js / ModelPanel.js / Header.js / ActionBar.js
@@ -71,6 +71,7 @@ src/
 - `engine.js` never imports from `transcription.js` or `model.js` — this prevents a circular dependency
 - `updateFile()` lives in `signals.js` (not `drive.js`) so both `transcription.js` and components can import it without cycles
 - `model.js` is the only module that imports from both `engine.js` and `transcription.js`
+- `atfEditEntry` signal in `signals.js` bridges ATF editing between the two `AtfInput` instances (chips in FileItem, input in WizardNav). Edit button writes to the signal; the input instance's `useEffect` reads it, populates local state, then clears it.
 
 ### UI sections
 1. **Header** — model status indicator, settings gear

@@ -1,6 +1,6 @@
-import { html, useState, useRef } from '../lib.js';
+import { html, useState, useRef, useEffect } from '../lib.js';
 import { ATF_MAX, ATF_TYPES } from '../config.js';
-import { files, updateFile } from '../signals.js';
+import { files, updateFile, atfEditEntry } from '../signals.js';
 import { genId } from '../helpers.js';
 import { parakeetModel, runParakeet } from '../engine.js';
 import { prepareAudio } from '../audio.js';
@@ -37,10 +37,18 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
   const remove = id => saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
 
   const edit = entry => {
-    setType(entry.type);
-    setDraft(entry.text);
+    atfEditEntry.value = { type: entry.type, text: entry.text, id: entry.id, fileIndex };
     saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== entry.id));
   };
+
+  useEffect(() => {
+    const pending = atfEditEntry.value;
+    if (!pending || pending.fileIndex !== fileIndex) return;
+    setType(pending.type);
+    setDraft(pending.text);
+    atfEditEntry.value = null;
+  }, [atfEditEntry.value]);
+
   const onKey  = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
   const placeholder = ATF_TYPES.find(a => a.type === type)?.placeholder || '';
 

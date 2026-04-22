@@ -17,6 +17,7 @@ export const historyEntries  = signal([]);
 export const storageInfo     = signal({ pct: 0, text: 'Calculating…', warn: false });
 export const appView         = signal('home');   // 'home' | 'wizard' | 'summary'
 export const wizardIndex     = signal(0);
+export const atfEditEntry    = signal(null);
 
 export function updateFile(i, patch) {
   files.value = files.value.map((f, idx) => idx === i ? { ...f, ...patch } : f);
