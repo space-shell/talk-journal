@@ -1,4 +1,4 @@
-import { html, useState, useRef, useEffect } from '../lib.js';
+import { html, useSignal, effect } from '../lib.js';
 import { ATF_MAX, ATF_TYPES } from '../config.js';
 import { files, updateFile, atfEditEntry } from '../signals.js';
 import { genId } from '../helpers.js';
@@ -17,21 +17,22 @@ const randomAtfType = () => ATF_TYPES[Math.floor(Math.random() * ATF_TYPES.lengt
 
 const rotateType = (type) => ATF_TYPES[(ATF_TYPES.findIndex(({ type: t }) => t === type ) + 1) % ATF_TYPES.length].type;
 
+let atfMediaRef = null;
+let atfChunksRef = [];
+
 export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput = true }) {
-  const [draft,   setDraft]   = useState('');
-  const [type,    setType]    = useState(randomAtfType);
-  const [atfRec,  setAtfRec]  = useState(false);
-  const [atfBusy, setAtfBusy] = useState(false);
-  const atfMediaRef  = useRef(null);
-  const atfChunksRef = useRef([]);
+  const draft   = useSignal('');
+  const type    = useSignal(randomAtfType());
+  const atfRec  = useSignal(false);
+  const atfBusy = useSignal(false);
 
   const add = () => {
-    const text = draft.trim();
+    const text = draft.value.trim();
     if (!text) return;
-    const entry = { id: genId(), type, text, createdAt: new Date().toISOString() };
+    const entry = { id: genId(), type: type.value, text, createdAt: new Date().toISOString() };
     saveFileEntries(fileIndex, [...fileEntries, entry]);
-    setDraft('');
-    setType(randomAtfType());
+    draft.value = '';
+    type.value = randomAtfType();
   };
 
   const remove = id => saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== id));
@@ -41,36 +42,36 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
     saveFileEntries(fileIndex, fileEntries.filter(e => e.id !== entry.id));
   };
 
-  useEffect(() => {
+  effect(() => {
     const pending = atfEditEntry.value;
     if (!pending || pending.fileIndex !== fileIndex) return;
-    setType(pending.type);
-    setDraft(pending.text);
+    type.value = pending.type;
+    draft.value = pending.text;
     atfEditEntry.value = null;
-  }, [atfEditEntry.value]);
+  });
 
   const onKey  = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
-  const placeholder = ATF_TYPES.find(a => a.type === type)?.placeholder || '';
+  const placeholder = ATF_TYPES.find(a => a.type === type.value)?.placeholder || '';
 
   const toggleAtfMic = async () => {
-    if (atfRec) { atfMediaRef.current?.stop(); setAtfRec(false); return; }
+    if (atfRec.value) { atfMediaRef?.stop(); atfRec.value = false; return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      atfChunksRef.current = [];
+      atfChunksRef = [];
       const mr = new MediaRecorder(stream);
-      mr.ondataavailable = e => { if (e.data.size > 0) atfChunksRef.current.push(e.data); };
+      mr.ondataavailable = e => { if (e.data.size > 0) atfChunksRef.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
-        setAtfBusy(true);
+        atfBusy.value = true;
         try {
-          const blob = new Blob(atfChunksRef.current, { type: mr.mimeType });
+          const blob = new Blob(atfChunksRef, { type: mr.mimeType });
           const f32  = await prepareAudio(await blob.arrayBuffer());
-          const text = await runParakeet(f32, true);  // priority — jump queue
-          if (text?.trim()) setDraft(prev => prev ? `${prev} ${text.trim()}` : text.trim());
+          const text = await runParakeet(f32, true);
+          if (text?.trim()) draft.value = draft.value ? `${draft.value} ${text.trim()}` : text.trim();
         } catch (e) { console.error('ATF mic transcription failed:', e); }
-        setAtfBusy(false);
+        atfBusy.value = false;
       };
-      mr.start(); atfMediaRef.current = mr; setAtfRec(true);
+      mr.start(); atfMediaRef = mr; atfRec.value = true;
     } catch (e) { console.error('Mic access denied:', e); }
   };
 
@@ -92,10 +93,10 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
           </div>`;
       })}
       ${showInput && html`
-        <h5 class="atf-add-type">${ATF_TYPES.find(({ type: t }) => t === type ).label}</h5>
+        <h5 class="atf-add-type">${ATF_TYPES.find(({ type: t }) => t === type.value ).label}</h5>
 
         <div class="atf-add-row">
-          ${/* <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
+          ${/* <select class="atf-type-select" value=${type.value} onChange=${e => type.value = e.target.value}>
             ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
           </select> */ null}
 
@@ -103,25 +104,25 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
             rows="2"
             class="atf-input"
             placeholder=${placeholder}
-            maxlength=${ATF_MAX} value=${draft}
-            onInput=${e => setDraft(e.target.value)}
+            maxlength=${ATF_MAX} value=${draft.value}
+            onInput=${e => draft.value = e.target.value}
             onKeyDown=${onKey} />
 
           ${/* <button
             class="btn btn-ghost btn-sm"
             data-mic
-            disabled=${!parakeetModel || atfBusy}
-            title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
+            disabled=${!parakeetModel || atfBusy.value}
+            title=${!parakeetModel ? 'Model not loaded' : atfRec.value ? 'Stop recording' : 'Speak an entry'}
             onClick=${toggleAtfMic}>
-            ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
+            ${atfBusy.value ? '…' : atfRec.value ? html`<${IconMicActive} />` : html`<${IconMic} />`}
           </button>  */ null}
           
-          <button class="btn btn-ghost btn-sm" onClick=${() => setType(a => (console.log(a, rotateType(a)), rotateType(a)))}>Change</button>
+          <button class="btn btn-ghost btn-sm" onClick=${() => type.value = rotateType(type.value)}>Change</button>
 
-          <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
+          <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.value.trim()}>Add</button>
         </div>
 
-        ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
+        ${draft.value.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.value.length} left</div>`}
       `}
     </div>`;
 }
