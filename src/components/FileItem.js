@@ -1,4 +1,4 @@
-import { html, useState, useEffect, useRef } from '../lib.js';
+import { html, useSignal, effect } from '../lib.js';
 import { files, updateFile, cfg } from '../signals.js';
 import { fmtBytes, fmtDur, fmtTime } from '../helpers.js';
 import { removeTx, updateTx, refreshHistory, refreshStorage } from '../storage.js';
@@ -18,25 +18,24 @@ const BADGE_MAP = {
   cleared:      ['badge-pending',      'Cleared'],
 };
 
-export function FileItem({ f, i }) {
-  const [notesDraft, setNotesDraft] = useState(f.notes || '');
-  const [recording,  setRecording]  = useState(false);
-  const [micBusy,    setMicBusy]    = useState(false);
-  const [elapsed,    setElapsed]    = useState(0);
-  const mediaRecRef   = useRef(null);
-  const chunksRef     = useRef([]);
-  const notesTimerRef = useRef(null);
-  const elapsedRef    = useRef(null);
+let mediaRecRef   = null;
+let chunksRef     = [];
+let notesTimerRef = null;
 
-  useEffect(() => {
-    if (f.status === 'transcribing') {
-      setElapsed(0);
-      elapsedRef.current = setInterval(() => setElapsed(e => e + 1), 1000);
-    } else {
-      clearInterval(elapsedRef.current);
+export function FileItem({ f, i }) {
+  const notesDraft = useSignal(f.notes || '');
+  const recording  = useSignal(false);
+  const micBusy    = useSignal(false);
+  const elapsed    = useSignal(0);
+
+  effect(() => {
+    const file = files.value[i];
+    if (file?.status === 'transcribing') {
+      elapsed.value = 0;
+      const id = setInterval(() => { elapsed.value++; }, 1000);
+      return () => clearInterval(id);
     }
-    return () => clearInterval(elapsedRef.current);
-  }, [f.status]);
+  });
 
   const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
   const inProgress = f.status === 'converting' || f.status === 'transcribing';
@@ -49,34 +48,34 @@ export function FileItem({ f, i }) {
 
   const onNotesChange = e => {
     const text = e.target.value;
-    setNotesDraft(text);
-    clearTimeout(notesTimerRef.current);
-    notesTimerRef.current = setTimeout(() => persistNotes(text), 800);
+    notesDraft.value = text;
+    clearTimeout(notesTimerRef);
+    notesTimerRef = setTimeout(() => persistNotes(text), 800);
   };
 
   const toggleRecording = async () => {
-    if (recording) { mediaRecRef.current?.stop(); setRecording(false); return; }
+    if (recording.value) { mediaRecRef?.stop(); recording.value = false; return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunksRef.current = [];
+      chunksRef = [];
       const mr = new MediaRecorder(stream);
-      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
-        setMicBusy(true);
+        micBusy.value = true;
         try {
-          const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+          const blob = new Blob(chunksRef, { type: mr.mimeType });
           const f32  = await prepareAudio(await blob.arrayBuffer());
-          const text = await runParakeet(f32, true);  // priority — jump queue
+          const text = await runParakeet(f32, true);
           if (text?.trim()) {
-            const next = notesDraft ? `${notesDraft} ${text.trim()}` : text.trim();
-            setNotesDraft(next);
+            const next = notesDraft.value ? `${notesDraft.value} ${text.trim()}` : text.trim();
+            notesDraft.value = next;
             persistNotes(next);
           }
         } catch (e) { console.error('Mic transcription failed:', e); }
-        setMicBusy(false);
+        micBusy.value = false;
       };
-      mr.start(); mediaRecRef.current = mr; setRecording(true);
+      mr.start(); mediaRecRef = mr; recording.value = true;
     } catch (e) { console.error('Mic access denied:', e); }
   };
 
@@ -87,7 +86,7 @@ export function FileItem({ f, i }) {
       files.value = files.value.filter((_, idx) => idx !== i);
     } else {
       updateFile(i, { transcript: null, status: 'cleared', savedId: null, notes: '', entries: [] });
-      setNotesDraft('');
+      notesDraft.value = '';
     }
     refreshHistory(); refreshStorage();
   };
@@ -101,7 +100,7 @@ export function FileItem({ f, i }) {
             <span class=${'badge ' + bc}>${bl}</span>
           </div>
           <div class="file-name" title=${f.path}>${f.path}</div>
-          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)}${f.status === 'transcribing' && elapsed > 0 ? ` · ${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}` : ''}</div>
+          <div class="file-meta">${fmtBytes(f.size)} · ${fmtDur(f.size)}${f.status === 'transcribing' && elapsed.value > 0 ? ` · ${Math.floor(elapsed.value/60)}:${String(elapsed.value%60).padStart(2,'0')}` : ''}</div>
         </div>
       </div>
       ${inProgress && html`<div class="progress-bar"><div class="progress-fill"></div></div>`}
@@ -114,14 +113,14 @@ export function FileItem({ f, i }) {
         </div>
         ${c.notes_enabled && html`
           <textarea class="notes-area" placeholder="Notes…" rows="3"
-            value=${notesDraft} onInput=${onNotesChange}
+            value=${notesDraft.value} onInput=${onNotesChange}
           ></textarea>
           <div class="notes-footer" style="justify-content:flex-end">
             <button class="btn btn-ghost btn-sm" data-mic
-              disabled=${!parakeetModel || micBusy}
-              title=${!parakeetModel ? 'Model not loaded' : recording ? 'Stop recording' : 'Speak a note'}
+              disabled=${!parakeetModel || micBusy.value}
+              title=${!parakeetModel ? 'Model not loaded' : recording.value ? 'Stop recording' : 'Speak a note'}
               onClick=${toggleRecording}>
-              ${micBusy ? 'Transcribing…' : recording
+              ${micBusy.value ? 'Transcribing…' : recording.value
                 ? html`<${IconMicActive} /> Stop`
                 : html`<${IconMic} />`}
             </button>
