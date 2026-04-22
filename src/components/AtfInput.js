@@ -15,6 +15,8 @@ function saveFileEntries(i, entries) {
 
 const randomAtfType = () => ATF_TYPES[Math.floor(Math.random() * ATF_TYPES.length)].type;
 
+const rotateType = (type) => ATF_TYPES[(ATF_TYPES.findIndex(({ type: t }) => t === type ) + 1) % ATF_TYPES.length].type;
+
 export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput = true }) {
   const [draft,   setDraft]   = useState('');
   const [type,    setType]    = useState(randomAtfType);
@@ -82,22 +84,35 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
           </div>`;
       })}
       ${showInput && html`
+        <h5 class="atf-add-type">${ATF_TYPES.find(({ type: t }) => t === type ).label}</h5>
+
         <div class="atf-add-row">
-          <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
+          ${/* <select class="atf-type-select" value=${type} onChange=${e => setType(e.target.value)}>
             ${ATF_TYPES.map(({ type: t, label }) => html`<option value=${t}>${label.slice(0, -1)}</option>`)}
-          </select>
-          <input class="atf-input" type="text" placeholder=${placeholder}
+          </select> */ null}
+
+          <textarea
+            rows="2"
+            class="atf-input"
+            placeholder=${placeholder}
             maxlength=${ATF_MAX} value=${draft}
             onInput=${e => setDraft(e.target.value)}
             onKeyDown=${onKey} />
-          <button class="btn btn-ghost btn-sm" data-mic
+
+          ${/* <button
+            class="btn btn-ghost btn-sm"
+            data-mic
             disabled=${!parakeetModel || atfBusy}
             title=${!parakeetModel ? 'Model not loaded' : atfRec ? 'Stop recording' : 'Speak an entry'}
             onClick=${toggleAtfMic}>
             ${atfBusy ? '…' : atfRec ? html`<${IconMicActive} />` : html`<${IconMic} />`}
-          </button>
+          </button>  */ null}
+          
+          <button class="btn btn-ghost btn-sm" onClick=${() => setType(a => (console.log(a, rotateType(a)), rotateType(a)))}>Change</button>
+
           <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.trim()}>Add</button>
         </div>
+
         ${draft.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.length} left</div>`}
       `}
     </div>`;

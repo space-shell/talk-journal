@@ -283,6 +283,7 @@ main {
 }
 .atf-chip button:hover { opacity: 1; color: var(--red); }
 .atf-chip button.atf-chip-edit:hover { color: var(--accent); }
+.atf-add-type { }
 .atf-add-row { display: flex; gap: 0.4rem; align-items: stretch; }
 .atf-actions { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; }
 .atf-trans-select { display: flex; gap: 0.4rem; align-items: stretch; }
@@ -290,6 +291,7 @@ main {
   flex: 1; background: var(--surface2); border: 1px solid var(--border);
   border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.85rem;
   font-family: inherit; color: var(--text);
+  resize: none;
 }
 .atf-input:focus { outline: none; border-color: var(--accent); }
 .atf-type-select {
