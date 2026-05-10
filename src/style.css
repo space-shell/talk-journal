@@ -294,6 +294,9 @@ main {
   resize: none;
 }
 .atf-input:focus { outline: none; border-color: var(--accent); }
+.atf-input--selfref { background: rgba(255, 180, 180, 0.25); border-color: rgba(220, 80, 80, 0.5); }
+.atf-input--selfref:focus { border-color: rgba(220, 80, 80, 0.7); }
+.atf-selfref-warn { font-size: 0.72rem; color: #b44; margin-top: 0.2rem; }
 .atf-type-select {
   background: var(--surface2); border: 1px solid var(--border);
   border-radius: 8px; padding: 0.5rem 0.6rem; font-size: 0.8rem;

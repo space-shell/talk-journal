@@ -13,6 +13,8 @@ function saveFileEntries(i, entries) {
   if (id) updateTx(id, { entries });
 }
 
+const SELF_REF_RE = /\b(I|me|my|mine|myself|I'm|I've|I'll|I'd)\b/i;
+
 const randomAtfType = () => ATF_TYPES[Math.floor(Math.random() * ATF_TYPES.length)].type;
 
 const rotateType = (type) => ATF_TYPES[(ATF_TYPES.findIndex(({ type: t }) => t === type ) + 1) % ATF_TYPES.length].type;
@@ -50,6 +52,7 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
     atfEditEntry.value = null;
   });
 
+  const selfRef = SELF_REF_RE.test(draft.value);
   const onKey  = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } };
   const placeholder = ATF_TYPES.find(a => a.type === type.value)?.placeholder || '';
 
@@ -102,7 +105,7 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
 
           <textarea
             rows="2"
-            class="atf-input"
+            class=${'atf-input' + (selfRef ? ' atf-input--selfref' : '')}
             placeholder=${placeholder}
             maxlength=${ATF_MAX} value=${draft.value}
             onInput=${e => draft.value = e.target.value}
@@ -121,6 +124,8 @@ export function AtfInput({ fileEntries, fileIndex, showChips = true, showInput =
 
           <button class="btn btn-ghost btn-sm" onClick=${add} disabled=${!draft.value.trim()}>Add</button>
         </div>
+
+        ${selfRef && html`<div class="atf-selfref-warn">Tip: entries should refer to the you of the past or the you of the future, not the present self.</div>`}
 
         ${draft.value.length > ATF_MAX - 30 && html`<div class="atf-counter">${ATF_MAX - draft.value.length} left</div>`}
       `}
