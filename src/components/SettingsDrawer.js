@@ -1,10 +1,11 @@
 import { html, useSignal, effect } from '../lib.js';
 import { DEFAULTS } from '../config.js';
-import { cfg, settingsOpen, storageInfo } from '../signals.js';
+import { cfg, settingsOpen, storageInfo, llmStatus, llmDlProgress } from '../signals.js';
 import { clearHistory } from '../storage.js';
 import { nostrStatus, syncNow, autoSync } from '../nostr-sync.js';
 import { loadNsec, saveNsec, clearPrivkey, generateKeypair, npubFromNsec } from '../nostr-keys.js';
 import { loadRelays, saveRelays, relayStatuses, connectRelays } from '../nostr-relay.js';
+import { loadLlm, unloadLlm, isLlmReady } from '../llm.js';
 import { IconX } from './icons.js';
 
 export function SettingsDrawer() {
@@ -22,6 +23,7 @@ export function SettingsDrawer() {
   const notionKey   = useSignal(c.notion_api_key);
   const notionId    = useSignal(c.notion_target_id);
   const obsidian    = useSignal(c.obsidian_vault_name);
+  const llmFmt      = useSignal(c.llm_formatting);
   const nsecInput   = useSignal(loadNsec());
   const relaysInput = useSignal(loadRelays().join('\n'));
   const si = storageInfo.value;
@@ -50,8 +52,39 @@ export function SettingsDrawer() {
     pad.value = c.vad_padding_ms; silGap.value = c.vad_min_silence_ms; autoSave.value = c.auto_save;
     autoTx.value = c.auto_transcribe; delAfter.value = c.delete_after_transcription; notionKey.value = c.notion_api_key;
     notionId.value = c.notion_target_id; obsidian.value = c.obsidian_vault_name;
+    llmFmt.value = c.llm_formatting;
     nsecInput.value = loadNsec(); relaysInput.value = loadRelays().join('\n');
   });
+
+  const onLlmToggle = async (checked) => {
+    llmFmt.value = checked;
+    if (checked && !isLlmReady() && !llmStatus.value.loading) {
+      llmStatus.value = { loaded: false, loading: true, error: null };
+      llmDlProgress.value = { visible: true, pct: 0, label: 'Starting download…' };
+      try {
+        await loadLlm(p => {
+          if (!p) return;
+          const pct = typeof p === 'number' ? p : p.progress != null ? p.progress : null;
+          llmDlProgress.value = {
+            visible: true,
+            pct: pct != null ? Math.min(99, pct) : llmDlProgress.value.pct,
+            label: p.text || 'Downloading model…',
+          };
+        });
+        llmDlProgress.value = { visible: true, pct: 100, label: 'Done' };
+        llmStatus.value = { loaded: true, loading: false, error: null };
+      } catch (e) {
+        llmStatus.value = { loaded: false, loading: false, error: e.message };
+        llmDlProgress.value = { visible: false, pct: 0, label: '' };
+        llmFmt.value = false;
+        console.error('LLM load failed:', e);
+      }
+    } else if (!checked) {
+      unloadLlm();
+      llmStatus.value = { loaded: false, loading: false, error: null };
+      llmDlProgress.value = { visible: false, pct: 0, label: '' };
+    }
+  };
 
   const save = () => {
     const prevDelete = cfg.value.delete_after_transcription;
@@ -67,6 +100,7 @@ export function SettingsDrawer() {
       notion_api_key:             notionKey.value,
       notion_target_id:           notionId.value,
       obsidian_vault_name:        obsidian.value,
+      llm_formatting:             llmFmt.value,
     };
     if (!prevDelete && delAfter.value) {
       alert('Delete after transcription enabled.\n\nSource audio files will be permanently deleted from the selected folder after each successful transcription. Ensure the folder is not your only copy of these recordings.');
@@ -107,6 +141,23 @@ export function SettingsDrawer() {
           <input type="text" placeholder="en" maxlength="10" value=${lang.value} onInput=${e => lang.value = e.target.value} />
           <span class="hint">ISO 639-1 code (en, sv, fr…). Leave blank to auto-detect.</span>
         </div>
+
+        <div class="section-label">Transcription Formatting</div>
+        <div class="field check-row">
+          <input type="checkbox" checked=${llmFmt.value} disabled=${llmStatus.value.loading}
+            onChange=${e => onLlmToggle(e.target.checked)} />
+          <label>Structure transcriptions with AI</label>
+        </div>
+        <p class="hint">Uses a small AI model (Gemma 2 2B) in your browser to add punctuation, paragraphs, and remove filler words from transcriptions. No data leaves your device. ~1.9 GB download, cached after first load.</p>
+        ${llmDlProgress.value.visible && html`
+          <div class="download-progress" style="margin-top:.5rem">
+            <div class="download-bar"><div class="download-fill" style=${'width:' + llmDlProgress.value.pct + '%'}></div></div>
+            <div class="download-label">${llmDlProgress.value.label}</div>
+          </div>
+        `}
+        ${llmStatus.value.error && html`
+          <p class="hint" style="color:var(--red);margin-top:.5rem">Failed to load model: ${llmStatus.value.error}</p>
+        `}
 
         <div class="section-label">Silence Removal (VAD)</div>
         <div class="field check-row">

@@ -1,230 +1,276 @@
-# Feature Specification: WebLLM In-Browser AI Assistance
+# Feature Specification: LLM Transcription Formatting (Phase 1)
 
 **Feature Branch**: `001-webllm-integration`
 **Created**: 2026-04-13
+**Updated**: 2026-05-10
 **Status**: Draft
-**Input**: User description: "utilize the webllm framework to load a light weight llm model into the browser for client side usage. The llm model will provide the ability to 'clean up' the transcribed text, removing manarisms, placing punctuation and restructuring the text to add lists, paragraphs and so on. The llm model will also provide the ability to suggest entries based on the given transcription. The llm model will also provide the ability to generate reflective questions or insigts on both a given transcription or the session as a whole. This feature is for the initial integration of webllm framework and researching the appropriate model to use for this context."
+**Input**: User description: "Incorporate WebLLM to load a small, capable LLM that formats transcribed audio journal entries — providing correctly structured text with sentences, punctuation, and paragraphs. The formatting LLM is opt-in, enabled in settings, and runs sequentially after transcription using the same processing queue."
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 — Clean Up Transcription (Priority: P1)
+### User Story 1 — Enable Transcription Formatting (Priority: P1)
 
-A user has finished recording a voice note and the transcription appears in the wizard card.
-The raw transcription contains filler words ("um", "uh", "you know"), run-on sentences,
-and no punctuation. The user clicks "Clean Up" and the LLM rewrites the text in-place:
-removing mannerisms, adding punctuation, and restructuring into readable paragraphs or
-bullet lists where appropriate. The original text is preserved and the cleaned version
-replaces (or optionally sits alongside) the displayed transcription.
+A user opens the Settings drawer and sees a new "Transcription Formatting" toggle
+(labeled something like "Structure transcriptions with AI"). The toggle is off by
+default. When the user enables it for the first time, the LLM model download begins
+immediately — a progress indicator shows download status within the settings panel.
+Once downloaded, the model is cached locally for future sessions. The user can disable
+the toggle at any time; when disabled, all subsequent transcriptions display raw text
+only (no formatting attempt). Re-enabling uses the cached model without re-downloading.
 
-**Why this priority**: This is the most immediately useful LLM action — every transcription
-benefits from it, and it directly addresses the biggest pain point of raw speech-to-text output.
+**Why this priority**: The opt-in gate is a prerequisite for all formatting behaviour.
+Without it, nothing else in this feature works. It also establishes the model download
+UX pattern.
 
-**Independent Test**: Load the app with a single audio file already transcribed. Press
-"Clean Up" on the wizard card. Verify the displayed text is a grammatically coherent
-rewrite of the original, free of filler words, with punctuation and logical paragraph breaks.
+**Independent Test**: Open Settings. Toggle "Transcription Formatting" on. Verify a
+download progress indicator appears. Wait for completion. Toggle off, then on again —
+verify no re-download occurs (model loaded from cache). Toggle off — verify the
+setting persists across page reloads.
 
 **Acceptance Scenarios**:
 
-1. **Given** a transcription containing filler words and no punctuation,
-   **When** the user activates "Clean Up",
-   **Then** the displayed text is rewritten with punctuation, proper sentences, and
-   logical paragraph or list structure — with no filler words remaining.
-
-2. **Given** a transcription that is already clean,
-   **When** the user activates "Clean Up",
-   **Then** the text is returned unchanged (or only trivially altered), confirming the
-   model does not hallucinate additions.
-
-3. **Given** the LLM model is not yet loaded,
-   **When** the user activates "Clean Up",
-   **Then** a clear loading indicator is shown, and the action completes once the model
-   is ready — or an appropriate message is shown if the model failed to load.
+1. **Given** the user has never enabled formatting, **When** they toggle it on, **Then**
+   a model download begins with a visible progress indicator in the settings panel.
+2. **Given** the model is already cached locally, **When** the user toggles formatting on,
+   **Then** the model loads from cache without a full re-download.
+3. **Given** formatting is enabled, **When** the user toggles it off, **Then** no
+   formatting is attempted on subsequent transcriptions.
+4. **Given** the model download fails (network error, insufficient GPU), **When** the
+   user views settings, **Then** a clear error message is shown and the toggle reverts
+   to off — the core transcription workflow is unaffected.
 
 ---
 
-### User Story 2 — Suggest ATF Entries (Priority: P2)
+### User Story 2 — Automatic Post-Transcription Formatting (Priority: P1)
 
-After reading a transcription (raw or cleaned), the user wants help identifying what
-Action, Thought, or Feeling entries to log. They trigger "Suggest Entries" and the LLM
-analyses the transcription text, then proposes up to 3–5 draft ATF entries (across types)
-that the user can accept, edit, or discard with a single tap. Accepted suggestions
-populate the ATF input fields exactly as if the user had typed them.
+A user has enabled Transcription Formatting. They select a recordings folder and audio
+files are transcribed as usual. After each transcription completes, the formatting job
+is automatically queued. The user sees a brief status message on the card:
+"Currently structuring transcription…" with an animated indicator (e.g., a subtle
+pulse or spinner). Once formatting finishes, the card updates to display the structured
+text — with proper sentences, punctuation, and paragraph breaks. The user can toggle
+between the raw transcription and the formatted version at any time using a
+"Raw / Formatted" toggle on the card.
 
-**Why this priority**: ATF entry creation is the primary value output of the wizard. LLM
-suggestions lower the friction of the most cognitively demanding step.
+**Why this priority**: This is the core value proposition — every transcription benefits
+from readable formatting, and the automatic flow means zero extra effort from the user.
 
-**Independent Test**: Load a transcription that clearly describes an action taken, an
-emotional state, and a thought. Trigger "Suggest Entries". Verify that at least one entry
-of each relevant type is proposed, each ≤ 160 characters, and that accepting a suggestion
-adds it to the card's ATF list.
+**Independent Test**: Enable formatting in settings. Load one audio file. Wait for
+transcription to complete. Observe "Currently structuring transcription…" message.
+Wait for formatting to complete. Verify the displayed text has proper punctuation,
+sentences, and paragraphs. Toggle to "Raw" and verify the original text appears.
+Toggle back to "Formatted" and verify the structured text reappears.
 
 **Acceptance Scenarios**:
 
-1. **Given** a transcription describing a completed task, an emotion, and a reflection,
-   **When** the user triggers "Suggest Entries",
-   **Then** the LLM proposes labelled ATF entries (type + text ≤ 160 chars) covering
-   at least the observable types in the transcription.
-
-2. **Given** the user receives suggestions,
-   **When** they accept one,
-   **Then** it appears in the ATF section immediately, identical to a manually typed entry.
-
-3. **Given** the user receives suggestions,
-   **When** they dismiss or ignore them,
-   **Then** the card state is unchanged — no entries are added.
+1. **Given** formatting is enabled and a file has just been transcribed, **When** the
+   transcription completes, **Then** a formatting job is automatically queued and
+   "Currently structuring transcription…" is shown on that card.
+2. **Given** the formatting job completes, **When** the user views the card, **Then**
+   the formatted text replaces the raw text in the display, with proper sentences,
+   punctuation, and paragraph structure.
+3. **Given** a card has both raw and formatted text, **When** the user toggles to
+   "Raw", **Then** the original transcription text is displayed. **When** they toggle
+   to "Formatted", the structured version is displayed.
+4. **Given** formatting is enabled but the model is still downloading, **When** a
+   transcription completes, **Then** the formatting job is queued and waits for the
+   model to be ready before processing — the user sees the raw text until formatting
+   completes.
 
 ---
 
-### User Story 3 — Reflective Questions / Insights per Recording (Priority: P3)
+### User Story 3 — Sequential Processing with Transcription Queue (Priority: P1)
 
-On a wizard card, the user can request "Reflect" to receive 2–4 open-ended questions or
-insights generated from that recording's transcription. These are read-only prompts designed
-to encourage deeper journaling — they do not create entries automatically. The user can
-optionally copy a question into the notes field.
+A user has 7 audio files. Formatting is enabled. Transcription and formatting must
+never run in parallel — they share a single processing queue. The user sees files
+transcribed one at a time, then formatted one at a time. If a file finishes
+transcribing, its formatting job is appended to the queue behind any remaining
+transcription jobs. The UI remains responsive throughout — the user can navigate
+between cards, add ATF entries, and write notes while processing continues in the
+background.
 
-**Why this priority**: Adds depth to single-entry review but is not on the critical path
-for the core journaling loop.
+**Why this priority**: Resource contention between the transcription engine (WebGPU)
+and the LLM (also WebGPU) would crash or freeze the app. Serialisation through the
+existing queue is a hard constraint, not a nice-to-have.
 
-**Independent Test**: Open a wizard card with a transcription. Trigger "Reflect". Verify
-2–4 distinct, open-ended questions or observations appear that are topically relevant to
-the transcription content.
+**Independent Test**: Enable formatting. Load 3+ audio files. Observe that only one
+job (transcription or formatting) runs at a time. Navigate between cards while
+processing — verify the UI is responsive. Verify each card transitions from
+"Transcribing…" → "Currently structuring transcription…" → formatted text display.
 
 **Acceptance Scenarios**:
 
-1. **Given** a transcription about a specific event,
-   **When** the user triggers "Reflect",
-   **Then** 2–4 questions or insights are displayed that are clearly related to the
-   transcription topic and encourage self-examination.
-
-2. **Given** reflective questions are displayed,
-   **When** the user closes or navigates away,
-   **Then** no entries or notes are altered unless the user explicitly copied content.
+1. **Given** multiple files are being processed, **When** a transcription completes,
+   **Then** the formatting job is queued after all pending transcription jobs — never
+   running concurrently with another transcription or formatting job.
+2. **Given** jobs are processing in the queue, **When** the user navigates between
+   cards, adds notes, or edits ATF entries, **Then** the UI remains responsive with
+   no freezing.
+3. **Given** a formatting job is running, **When** the user triggers a high-priority
+   mic dictation, **Then** the dictation job jumps ahead of the formatting job in the
+   queue (same priority behaviour as transcription jobs).
 
 ---
 
-### User Story 4 — Session-Wide Insights (Priority: P4)
+### User Story 4 — View Raw and Formatted Transcriptions (Priority: P2)
 
-From the Summary page, the user can trigger "Session Insights" to receive a brief
-synthesis across all transcriptions in the session: recurring themes, patterns, a
-suggested focus area, or noteworthy contrasts between recordings. Output is read-only
-text displayed in the Summary view.
+On any wizard card that has a formatted transcription, the user sees a toggle
+control that switches between "Raw" and "Formatted" views. This toggle is only
+visible when formatted text exists for that card. The default view after formatting
+completes is "Formatted". If formatting has not yet completed (or failed), only
+the raw text is shown with no toggle.
 
-**Why this priority**: Valuable but dependent on Users 1–3; only meaningful once the LLM
-is already loaded and the session contains multiple recordings.
+**Why this priority**: The toggle is essential UX but secondary to the automatic
+formatting flow itself. It ensures users always have access to the original text.
 
-**Independent Test**: Complete a session with 3+ recordings containing varied content.
-Navigate to the Summary page and trigger "Session Insights". Verify the output
-references content that spans multiple recordings and identifies at least one cross-session
-theme.
+**Independent Test**: View a card with formatted text — verify the toggle appears
+and defaults to "Formatted". Toggle to "Raw" — verify original text. Toggle back.
+View a card still being formatted — verify no toggle yet, only raw text with status
+message. View a card where formatting failed — verify no toggle, only raw text.
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed session with multiple transcriptions,
-   **When** the user triggers "Session Insights",
-   **Then** a cohesive summary is displayed that references themes or patterns visible
-   across more than one recording.
+1. **Given** a card has completed formatting, **When** the user views it, **Then** a
+   "Raw / Formatted" toggle is visible, defaulting to "Formatted".
+2. **Given** a card is still being formatted, **When** the user views it, **Then** no
+   toggle is shown — the raw text is displayed alongside the "Currently structuring
+   transcription…" status message.
+3. **Given** formatting failed for a card, **When** the user views it, **Then** no
+   toggle is shown and only the raw text is displayed.
+4. **Given** the user toggles to "Raw" on a card, **When** they navigate away and
+   return, **Then** the toggle remembers their selection (raw view is preserved).
 
-2. **Given** a session with only one recording,
-   **When** the user triggers "Session Insights",
-   **Then** a single-recording reflection is returned, or a message explains that
-   cross-session synthesis requires more recordings.
+---
+
+### User Story 5 — Manual Re-Format (Priority: P3)
+
+A user has formatted text on a card but wants to try formatting again (perhaps they
+changed the language setting or the original formatting produced poor results). They
+can trigger a "Re-format" action on the card, which queues a new formatting job using
+the raw transcription text as input. The existing formatted text is replaced when the
+new job completes.
+
+**Why this priority**: Useful recovery mechanism but not critical for initial value
+delivery.
+
+**Independent Test**: View a formatted card. Trigger "Re-format". Verify the status
+message reappears, the formatted text updates, and the toggle remains available.
+
+**Acceptance Scenarios**:
+
+1. **Given** a card has formatted text, **When** the user triggers "Re-format",
+   **Then** the raw text is sent through the LLM again and the formatted text is
+   replaced with the new result.
+2. **Given** re-formatting is in progress, **When** the user views the card, **Then**
+   the status message "Currently structuring transcription…" is shown again.
 
 ---
 
 ### Edge Cases
 
-- What happens when the LLM generates a cleaned transcription longer than the original
-  by a significant margin? (Guard against hallucinated additions.)
-- What if the transcription is very short (< 10 words)? LLM actions should still complete
-  without error, potentially returning a minimal or no-op result.
-- What if the device lacks sufficient memory/GPU to load the chosen model? A clear,
-  actionable error message must be shown and the existing transcription workflow must
-  remain unaffected.
-- What happens during LLM generation if the user navigates to a different wizard card?
-  The queued or in-flight job completes in the background; navigation must not be blocked,
-  and the result is applied to the correct card when the job finishes.
-- ATF suggestions that exceed 160 characters must be automatically truncated or rejected
-  before being presented to the user.
+- What happens when the LLM generates a formatted transcription significantly longer
+  than the raw text? The formatted output should be capped or flagged — the model
+  should be instructed not to add content, only to restructure.
+- What if the transcription is very short (< 10 words)? Formatting should still
+  complete without error, potentially returning a minimally altered version.
+- What if the device lacks sufficient memory/GPU to load the model? A clear, actionable
+  error is shown in settings; the toggle reverts to off; transcription workflow is
+  unaffected.
+- What if the user enables formatting mid-session (some files already transcribed)?
+  Already-transcribed files are not retroactively formatted — only new transcriptions
+  get formatted. The user can use "Re-format" on individual cards if desired.
+- What happens if the user disables formatting while a formatting job is queued?
+  The queued job is cancelled (or allowed to complete but discarded). No new formatting
+  jobs are queued until the setting is re-enabled.
+- What if the model download is interrupted? The download can be resumed on next
+  toggle enable — WebLLM's caching handles partial downloads.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The app MUST load a lightweight LLM model entirely within the browser using
-  the WebLLM framework, with no data transmitted to any server.
-- **FR-002**: The app MUST display a model load progress indicator and inform the user
-  when the model is ready for use.
-- **FR-003**: Users MUST be able to trigger a "Clean Up" action on any transcription in
-  the wizard, receiving a rewritten version free of filler words with punctuation and
-  paragraph/list structure.
-- **FR-004**: The original transcription text MUST be preserved and accessible even after
-  a "Clean Up" action has been applied.
-- **FR-005**: Users MUST be able to trigger "Suggest Entries" on any wizard card to receive
-  LLM-generated ATF entry drafts (type + text ≤ 160 chars each).
-- **FR-006**: Suggested ATF entries MUST be individually acceptable or dismissable; accepted
-  entries MUST be added to the card's ATF list exactly as if typed manually.
-- **FR-007**: Users MUST be able to trigger "Reflect" on any wizard card to receive 2–4
-  open-ended questions or insights relevant to that recording's transcription.
-- **FR-008**: Users MUST be able to trigger "Session Insights" from the Summary page,
-  receiving a read-only cross-session synthesis.
-- **FR-009**: All LLM features MUST degrade gracefully if the model fails to load — the
-  core transcription and ATF workflow MUST remain fully functional regardless.
-- **FR-010**: The chosen model MUST be selected based on research into the best available
-  WebLLM-compatible model for this use case (journaling assistance, structured output,
-  instruction-following), with the selection documented.
-- **FR-011**: All LLM inference jobs (Clean Up, Suggest Entries, Reflect, Session Insights)
-  MUST be routed through the same shared inference queue as Parakeet transcription jobs,
-  ensuring that only one intensive task runs at a time and preventing CPU/GPU contention
-  that would freeze the UI.
+- **FR-001**: The app MUST load a small LLM model (2–3B parameters) entirely within the
+  browser using the WebLLM framework, with no data leaving the device.
+- **FR-002**: Transcription formatting MUST be opt-in — disabled by default, enabled via
+  a toggle in the Settings drawer.
+- **FR-003**: Enabling the formatting toggle for the first time MUST trigger the model
+  download with a visible progress indicator in the settings panel.
+- **FR-004**: The model MUST be cached locally after download so that re-enabling the
+  toggle does not require a full re-download.
+- **FR-005**: When formatting is enabled, a formatting job MUST be automatically queued
+  after each successful transcription, running the raw text through the LLM to produce
+  a structured version with proper sentences, punctuation, and paragraph breaks.
+- **FR-006**: Formatting jobs MUST be serialised through the same processing queue as
+  transcription jobs — transcription and formatting MUST never run in parallel.
+- **FR-007**: While a formatting job is in progress, the card MUST display a status
+  message "Currently structuring transcription…" with a visible activity indicator.
+- **FR-008**: The original raw transcription text MUST be preserved in storage alongside
+  the formatted text. The user MUST be able to toggle between raw and formatted views.
+- **FR-009**: The toggle between raw and formatted views MUST only appear on cards that
+  have completed formatting. Cards without formatted text show only the raw view.
+- **FR-010**: All formatting features MUST degrade gracefully — if the model fails to
+  load, the toggle reverts to off and the core transcription workflow is unaffected.
+- **FR-011**: The formatting toggle state MUST persist across page reloads (stored in
+  settings).
+- **FR-012**: The formatted text MUST be stored as a new field (`formattedText`) on the
+  transcription entry alongside the existing `text` field.
+- **FR-013**: Users MUST be able to trigger "Re-format" on any card that has formatted
+  text, re-running the LLM on the raw transcription.
+- **FR-014**: The LLM prompt MUST instruct the model to restructure text only — adding
+  punctuation, sentences, and paragraphs — without adding, removing, or altering the
+  meaning of the original content.
 
 ### Key Entities
 
-- **LLM Model**: The specific WebLLM-compatible model selected after research; identified
-  by its WebLLM model ID, download size, and capability profile.
-- **Cleaned Transcription**: A rewritten version of a raw transcription produced by the
-  LLM; associated with the original transcription entry.
-- **ATF Suggestion**: An LLM-generated draft entry with a `type` (`action|thought|feeling`)
-  and `text` (≤ 160 chars); transient until accepted by the user.
-- **Reflection Output**: A set of 2–4 read-only questions or insights generated from a
-  single transcription or a full session; not persisted.
+- **Formatted Transcription**: A structured version of the raw transcription produced
+  by the LLM. Stored as a `formattedText` field on the existing transcription entry.
+  Associated 1:1 with the raw transcription. Can be regenerated via "Re-format".
+- **Formatting Toggle**: A user setting (persisted in app settings) that controls whether
+  transcription formatting is active. When first enabled, triggers model download.
+- **LLM Model**: A small (2–3B parameter) WebLLM-compatible language model loaded in the
+  browser. Cached locally after first download.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: A user can activate "Clean Up" on a transcription and receive a readable,
-  punctuated rewrite within 30 seconds on a mid-range device after the model is loaded.
-- **SC-002**: ATF suggestions cover at least 2 of the 3 entry types (action/thought/feeling)
-  for transcriptions that contain observable examples of each type.
+- **SC-001**: A user can enable transcription formatting in settings, and the model
+  downloads with a visible progress indicator, completing without errors on a
+  Chromium browser with WebGPU support.
+- **SC-002**: After a transcription completes, the formatted version appears within
+  30 seconds on a mid-range device, displaying properly punctuated text with
+  paragraph breaks.
 - **SC-003**: The core journaling workflow (folder selection → transcription → wizard →
-  summary) completes without error on devices where the LLM model fails or has not been
-  downloaded.
-- **SC-004**: The selected model and the rationale for its selection are documented in
-  a research note within the feature spec directory, including model size, capabilities,
-  and alternatives considered.
-- **SC-005**: LLM actions and Parakeet transcription jobs are serialized through a shared
-  queue — triggering an LLM action while a transcription is in progress queues it rather
-  than running in parallel, and the UI remains responsive throughout.
+  summary) works identically when formatting is disabled — zero impact on existing
+  functionality.
+- **SC-004**: Transcription and formatting jobs are serialised — never running in
+  parallel — and the UI remains responsive (no freezing) during all processing.
+- **SC-005**: Users can toggle between raw and formatted transcription views on any
+  card that has completed formatting, with the toggle defaulting to "Formatted".
 
 ## Assumptions
 
-- The WebLLM framework supports Chromium-based browsers with WebGPU, consistent with the
-  app's existing Chromium-only stance. A WASM fallback within WebLLM may be considered
-  but is not required for this initial integration.
-- The LLM model will be cached locally by WebLLM after the first download, similar to
-  the Parakeet model caching behaviour.
-- Model size will be constrained to something a typical user would be willing to download
-  for a journaling aid — assumed ceiling of ~1–2 GB, with preference for smaller.
-- Prompts sent to the LLM contain only the transcription text; no audio, user identity,
-  or other personal metadata are included in model inputs.
-- "Clean Up" replaces the displayed transcription text in the UI; the original raw text
-  is retained in the stored entry so the user can revert or compare.
-- ATF entry suggestions are generated as structured output (type + text pairs); the
-  implementation will use prompting strategies appropriate to the chosen model's
-  instruction-following capability.
-- Session Insights operate on the full concatenated text of all transcriptions in the
-  current session — no additional persistent summary is stored beyond what already exists
-  in localStorage.
-- LLM jobs are treated as standard-priority queue entries (equivalent to batch
-  transcription jobs, not high-priority mic-dictation jobs), so user-triggered mic
-  dictation continues to jump ahead in the queue.
+- WebLLM supports Chromium-based browsers with WebGPU, consistent with the app's
+  existing Chromium-only constraint.
+- The model will be cached by WebLLM after first download (typically in IndexedDB or
+  Cache API), similar to the Parakeet model caching behaviour.
+- Model size is constrained to a practical download for a journaling app — target
+  ~1–2 GB for the quantised model, with preference for smaller where capability allows.
+- The formatted text is produced by a single LLM call with a carefully crafted prompt —
+  no multi-turn conversation or iterative refinement.
+- Formatting jobs are standard-priority queue entries (same as batch transcription),
+  so user-triggered mic dictation continues to jump ahead in the queue.
+- The LLM prompt explicitly instructs the model not to add content — only to
+  restructure, punctuate, and paragraph-break the existing text.
+- Files already transcribed before the setting is enabled are not retroactively
+  formatted — the user can trigger "Re-format" manually if desired.
+
+## Future Phases (Out of Scope)
+
+The following capabilities are deferred to future phases:
+
+- **ATF Entry Suggestions**: LLM-generated draft Action/Thought/Feeling entries from
+  transcription text.
+- **Reflective Questions**: Per-recording open-ended questions or insights.
+- **Session-Wide Insights**: Cross-session synthesis and theme identification from
+  the Summary page.

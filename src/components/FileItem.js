@@ -2,7 +2,7 @@ import { html, useSignal, effect } from '../lib.js';
 import { files, updateFile, cfg } from '../signals.js';
 import { fmtBytes, fmtDur, fmtTime } from '../helpers.js';
 import { removeTx, updateTx, refreshHistory, refreshStorage } from '../storage.js';
-import { retryFile } from '../transcription.js';
+import { retryFile, reformatFile } from '../transcription.js';
 import { sendToNotion, sendToObsidian } from '../share.js';
 import { parakeetModel, runParakeet } from '../engine.js';
 import { prepareAudio } from '../audio.js';
@@ -40,6 +40,11 @@ export function FileItem({ f, i }) {
   const [bc, bl]   = BADGE_MAP[f.status] || BADGE_MAP.pending;
   const inProgress = f.status === 'converting' || f.status === 'transcribing';
   const c          = cfg.value;
+
+  const isFormatting  = f.formatting === 'pending' || f.formatting === 'formatting';
+  const hasFormatted  = f.formatting === 'done' && f.formattedText;
+  const viewMode      = f.txView || 'raw';
+  const displayText   = hasFormatted && viewMode === 'formatted' ? f.formattedText : f.transcript;
 
   const persistNotes = text => {
     updateFile(i, { notes: text });
@@ -85,7 +90,7 @@ export function FileItem({ f, i }) {
     if (f.deleted) {
       files.value = files.value.filter((_, idx) => idx !== i);
     } else {
-      updateFile(i, { transcript: null, status: 'cleared', savedId: null, notes: '', entries: [] });
+      updateFile(i, { transcript: null, status: 'cleared', savedId: null, notes: '', entries: [], formattedText: null, formatting: null, txView: null });
       notesDraft.value = '';
     }
     refreshHistory(); refreshStorage();
@@ -105,7 +110,26 @@ export function FileItem({ f, i }) {
       </div>
       ${inProgress && html`<div class="progress-bar"><div class="progress-fill"></div></div>`}
       ${f.transcript !== null && html`
-        <div class="transcript">${f.transcript}</div>
+        ${isFormatting && html`
+          <div class="formatting-status">
+            <span class="formatting-spinner"></span>
+            <span>Currently structuring transcription…</span>
+          </div>
+        `}
+        ${hasFormatted && html`
+          <div class="tx-view-toggle">
+            <button class=${'btn btn-ghost btn-sm' + (viewMode === 'raw' ? ' active' : '')}
+              onClick=${() => updateFile(i, { txView: 'raw' })}>Raw</button>
+            <button class=${'btn btn-ghost btn-sm' + (viewMode === 'formatted' ? ' active' : '')}
+              onClick=${() => updateFile(i, { txView: 'formatted' })}>Formatted</button>
+            ${c.llm_formatting && html`
+              <button class="btn btn-ghost btn-sm" style="margin-left:auto"
+                onClick=${() => reformatFile(i)}
+                disabled=${isFormatting}>Re-format</button>
+            `}
+          </div>
+        `}
+        <div class="transcript">${displayText}</div>
         <div class="tx-actions">
           ${c.notion_api_key && c.notion_target_id && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToNotion(i)}>Notion</button>`}
           ${c.obsidian_vault_name && html`<button class="btn btn-ghost btn-sm" onClick=${() => sendToObsidian(i)}>Obsidian</button>`}

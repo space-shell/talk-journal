@@ -45,13 +45,17 @@ src/
   signals.js                  All Preact signals + updateFile() helper; includes atfEditEntry for cross-instance ATF editing
   storage.js                  localStorage CRUD: saveTx/getTx/updateTx/removeTx + refreshHistory/refreshStorage/clearHistory
   audio.js                    prepareAudio() + removeSilence() (RMS VAD)
-  engine.js                   Parakeet inference: worker, txQueue, loadParakeet, runParakeet
-                                - exports parakeetModel/parakeetWorker as live ESM bindings
-                                - setParakeetModel() setter for test hooks
+  engine.js                   Shared inference queue (txQueue): queueJob, loadParakeet, runParakeet
+                                 - exports parakeetModel/parakeetWorker as live ESM bindings
+                                 - setParakeetModel() setter for test hooks
+                                 - queueJob() exported for use by llm.js (shared serial queue)
   model.js                    checkModelStatus(), downloadModel() — imports from both engine.js and transcription.js
                                 (kept separate from engine.js to avoid circular dependency)
   fs-handles.js               IndexedDB folder handle persistence (saveHandle/loadHandle)
-  transcription.js            requestBatch(), startBatch(), transcribeFile(), retryFile()
+  transcription.js            requestBatch(), startBatch(), transcribeFile(), retryFile(), reformatFile()
+  llm.js                      WebLLM LLM integration: loadLlm(), runLlmFormat(), isLlmReady(), unloadLlm()
+                                - loads Gemma 2 2B via @mlc-ai/web-llm for transcription formatting
+                                - runLlmFormat() uses queueJob() from engine.js to share the serial queue
   drive.js                    pickDrive(), scan(), tryAutoReconnect()
   navigation.js               goNext(), goPrev(), startNewSession()
   share.js                    exportAll(), shareAll(), sendToNotion(), sendToObsidian()
@@ -71,6 +75,7 @@ src/
 - `engine.js` never imports from `transcription.js` or `model.js` — this prevents a circular dependency
 - `updateFile()` lives in `signals.js` (not `drive.js`) so both `transcription.js` and components can import it without cycles
 - `model.js` is the only module that imports from both `engine.js` and `transcription.js`
+- `llm.js` imports `queueJob` from `engine.js` (never from `transcription.js`) — LLM formatting jobs share the same serial queue as transcription jobs
 - `atfEditEntry` signal in `signals.js` bridges ATF editing between the two `AtfInput` instances (chips in FileItem, input in WizardNav). Edit button writes to the signal; the input instance's `useEffect` reads it, populates local state, then clears it.
 
 ### UI sections
@@ -106,9 +111,22 @@ Supported input formats: any format decodable by `AudioContext.decodeAudioData()
 - **Boot gate**: `localStorage` flag `parakeet_model_ready` gates auto-load vs. download prompt
 - **Transcription call**: `model.transcribeLongAudio(float32, 16000)` — handles recordings up to 30 min. Returns `{ text, chunks }`.
 
+## WebLLM Integration (Transcription Formatting)
+
+- **Library**: `@mlc-ai/web-llm@0.2.83` via `import { CreateMLCEngine } from 'https://esm.sh/@mlc-ai/web-llm@0.2.83'`
+- **Model**: `gemma-2-2b-it-q4f16_1-MLC` (Gemma 2 2B, ~1.9 GB VRAM, 4k context)
+- **Purpose**: Formats raw transcriptions — adds punctuation, paragraph breaks, removes filler words
+- **Opt-in**: Disabled by default; enabled via "Structure transcriptions with AI" toggle in Settings
+- **Caching**: WebLLM caches model in browser Cache API after first download
+- **Boot gate**: `localStorage` flag `llm_model_ready` gates auto-load; model loads from cache on subsequent visits
+- **Queue**: Formatting jobs use `queueJob()` from `engine.js` — shares the serial queue with transcription jobs, never runs in parallel
+- **Auto-format**: When enabled, formatting is automatically queued after each successful transcription
+- **Toggle**: Users can switch between raw and formatted views per card; `formattedText` stored alongside `text` in localStorage
+- **Re-format**: Manual re-format button available on cards with formatted text
+
 ### Transcription Queue & Worker
 
-All parakeet inference goes through `runParakeet(float32, priority?)` in `src/engine.js`, which wraps every call in `runQueued()`. Only one inference runs at a time.
+All parakeet inference goes through `runParakeet(float32, priority?)` in `src/engine.js`, which wraps every call in `queueJob()`. Only one inference runs at a time.
 
 - **`txQueue`** — array of pending jobs `{ fn, resolve, reject }`. `priority=true` puts a job at the front (mic buttons use this so user-triggered dictation isn't blocked behind a long file batch).
 - **`drainTxQueue()`** — picks one job, sets `txRunning=true`, awaits it, then recurses. Never concurrent.
@@ -129,6 +147,7 @@ All parakeet inference goes through `runParakeet(float32, priority?)` in `src/en
 | `auto_save` | `true` | Persist to localStorage history |
 | `auto_transcribe` | `true` | Start batch automatically on folder selection |
 | `delete_after_transcription` | `false` | Per-file deletion after save confirmed |
+| `llm_formatting` | `false` | Auto-format transcriptions with local LLM after transcription |
 | `notion_api_key` / `notion_target_id` | — | Notion connector |
 | `obsidian_vault_name` | — | Obsidian URI connector |
 
@@ -136,7 +155,7 @@ All parakeet inference goes through `runParakeet(float32, priority?)` in `src/en
 
 ### Transcription entries
 - Index: `transcription:index` → JSON array of UUIDs, newest-first
-- Entry: `transcription:{uuid}` → `{ id, filename, transcribedAt, durationSeconds, text, silenceRemoved, deleted, notes, entries }`
+- Entry: `transcription:{uuid}` → `{ id, filename, transcribedAt, durationSeconds, text, silenceRemoved, deleted, notes, entries, formattedText }`
 
 ### ATF entries (stored inside each transcription entry)
 ```json

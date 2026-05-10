@@ -24,7 +24,7 @@ export function setParakeetModel(v) {
 // All inference is serialised so only one transcription runs at a time.
 // priority=true inserts the job next in queue (mic-triggered jobs skip ahead).
 
-function runQueued(fn, priority = false) {
+export function queueJob(fn, priority = false) {
   return new Promise((resolve, reject) => {
     const job = { fn, resolve, reject };
     if (priority) txQueue.unshift(job);
@@ -130,7 +130,7 @@ export async function loadParakeet(onProgress) {
 }
 
 export async function runParakeet(float32, priority = false) {
-  return runQueued(async () => {
+  return queueJob(async () => {
     if (parakeetWorker) {
       // Worker path — transfer the ArrayBuffer (zero-copy; float32 becomes detached)
       return new Promise((resolve, reject) => {

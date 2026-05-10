@@ -1,7 +1,8 @@
-# Specification Quality Checklist: WebLLM In-Browser AI Assistance
+# Specification Quality Checklist: LLM Transcription Formatting (Phase 1)
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-04-13
+**Updated**: 2026-05-10
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,8 +32,9 @@
 
 ## Notes
 
-- All items pass. Spec is ready for `/speckit.plan`.
-- FR-010 explicitly calls for a model research note to be produced as part of this
-  feature — that research output lives in the plan phase, not the spec.
-- The assumption that WebLLM supports WASM fallback should be validated during planning
-  research (Phase 0).
+- Spec narrowed from 4 user stories to focused Phase 1: transcription formatting only.
+- ATF suggestions, reflective questions, and session insights moved to "Future Phases".
+- FR-006 (shared queue serialisation) is a hard constraint to prevent GPU contention.
+- FR-012 adds `formattedText` field alongside existing `text` field on transcription entries.
+- The toggle defaulting to "Formatted" and remembering user preference is captured in
+  User Story 4 acceptance scenarios.

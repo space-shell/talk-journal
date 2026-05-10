@@ -14,6 +14,8 @@ export const NOSTR_APP_TAG    = 'tibbs';
 export const NOSTR_D_PREFIX   = 'tibbs:entry:';
 export const NOSTR_SETTINGS_D = 'tibbs:settings';
 
+export const LLM_MODEL_ID = 'gemma-2-2b-it-q4f16_1-MLC';
+
 export const DEFAULTS = {
   language:                   'en',
   vad_enabled:                true,
@@ -24,6 +26,7 @@ export const DEFAULTS = {
   auto_save:                  true,
   auto_transcribe:            true,
   notes_enabled:              false,
+  llm_formatting:             false,
   notion_api_key:             '',
   notion_target_id:           '',
   obsidian_vault_name:        '',

@@ -3,6 +3,7 @@ import { prepareAudio } from './audio.js';
 import { runParakeet } from './engine.js';
 import { genId } from './helpers.js';
 import { saveTx, updateTx, refreshHistory, refreshStorage } from './storage.js';
+import { isLlmReady, runLlmFormat } from './llm.js';
 
 export function requestBatch() {
   if (busy.value) return;
@@ -68,6 +69,10 @@ export async function transcribeFile(i) {
     }
 
     updateFile(i, { handle: null }); // release file handle
+
+    if (cfg.value.llm_formatting && isLlmReady()) {
+      queueFormatFile(i, savedId);
+    }
   } catch (e) {
     updateFile(i, { error: e.message, status: 'error' });
   }
@@ -79,4 +84,27 @@ export async function retryFile(i) {
   await transcribeFile(i);
   busy.value = false;
   refreshHistory();
+}
+
+function queueFormatFile(i, savedId) {
+  updateFile(i, { formatting: 'pending' });
+  (async () => {
+    try {
+      updateFile(i, { formatting: 'formatting' });
+      const raw = files.value[i].transcript;
+      const formatted = await runLlmFormat(raw);
+      updateFile(i, { formattedText: formatted, formatting: 'done', txView: 'formatted' });
+      if (savedId) updateTx(savedId, { formattedText: formatted });
+      refreshStorage();
+    } catch (e) {
+      console.warn('LLM formatting failed for', files.value[i]?.name, e);
+      updateFile(i, { formatting: 'error' });
+    }
+  })();
+}
+
+export function reformatFile(i) {
+  const f = files.value[i];
+  if (!f?.transcript) return;
+  queueFormatFile(i, f.savedId);
 }

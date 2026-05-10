@@ -247,6 +247,29 @@ main {
 }
 .tx-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 0.5rem; }
 
+.formatting-status {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.8rem; color: var(--accent); padding: 0.25rem 0;
+}
+.formatting-spinner {
+  width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.tx-view-toggle {
+  display: flex; align-items: center; gap: 0.25rem;
+  background: var(--surface2); border-radius: 6px; padding: 2px;
+  margin-bottom: 0.25rem;
+}
+.tx-view-toggle .btn-sm {
+  font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 4px;
+}
+.tx-view-toggle .btn-sm.active {
+  background: var(--accent); color: #fff;
+}
+
 .notes-area {
   width: 100%; background: var(--surface2); border: 1px solid var(--border);
   border-radius: 8px; padding: 0.75rem; font-size: 0.875rem; font-family: inherit;
